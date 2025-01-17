@@ -193,3 +193,11 @@ download_reports.xlsx
 .env
 .venv
 pyvenv.cfg
+
+
+# Ignore download_stats.json and processed_urls.txt
+download_stats.json
+processed_urls.txt
+
+# Ignore compiled Python files
+*.cpython-*.pyc
