@@ -108,23 +108,28 @@ class ScribdScraper:
     def process_search_results(self, search_results):
         """Process the search results and download documents"""
         try:
-            for category, subcategories in search_results.items():
-                for subcategory, results in subcategories.items():
-                    self.config_manager.log_message(f"Processing results for {category} - {subcategory}")
+            if not search_results or 'urls' not in search_results:
+                self.config_manager.log_message("No search results to process")
+                return
+                
+            urls = search_results['urls']
+            self.config_manager.log_message(f"Found {len(urls)} documents to process")
+            
+            for url in urls:
+                if self.should_process_url(url):
+                    self.config_manager.log_message(f"Processing URL: {url}")
+                    success = self.download_manager.download_document(url)
                     
-                    for result_url in results:
-                        if self.should_process_url(result_url):
-                            success = self.download_manager.download_document(result_url)
-                            
-                            if success:
-                                self.mark_url_processed(result_url)
-                            
-                            # Add delay between downloads
-                            time.sleep(5)
+                    if success:
+                        self.mark_url_processed(url)
+                        self.config_manager.log_message(f"Successfully downloaded: {url}")
+                    
+                    # Add delay between downloads
+                    time.sleep(5)
 
         except Exception as e:
             self.config_manager.log_message(f"Error processing search results: {str(e)}")
-
+            
     def should_process_url(self, url):
         """Check if URL should be processed"""
         if 'www.scribd.com/document/' not in url:

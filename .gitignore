@@ -170,8 +170,34 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-
-# user data related information
+# Folders to ignore
 chrome-user-data/
 files/
 logs/
+myvenv/
+__pycache__/
+.pytest_cache/
+bin/
+include/
+lib/
+lib64/
+
+# Files to ignore
+download_reports.xlsx
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+*.xlsx
+.env
+.venv
+pyvenv.cfg
+
+
+# Ignore download_stats.json and processed_urls.txt
+download_stats.json
+processed_urls.txt
+
+# Ignore compiled Python files
+*.cpython-*.pyc

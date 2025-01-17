@@ -17,6 +17,9 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 import time
 import random
 
+# helpul imports
+from decouple import config
+
 class AuthManager:
     def __init__(self, driver, config_manager):
         """
@@ -30,8 +33,8 @@ class AuthManager:
         self.config_manager = config_manager
         self.wait_time = 10
         self.credentials = {
-            'username': 'avunderwriting31@gmail.com',
-            'password': 'Newpassword@1'
+            'username': config('EMAIL_USERNAME'),
+            'password': config('EMAIL_PASSWORD')
         }
 
     def random_sleep(self):
