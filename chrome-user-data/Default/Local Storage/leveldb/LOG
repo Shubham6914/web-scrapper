@@ -1,6 +1,0 @@
-2025/01/17-12:52:27.383 4b40 Reusing MANIFEST /home/cyberium/shubham/scribd_scraper/chrome-user-data/Default/Local Storage/leveldb/MANIFEST-000001
-2025/01/17-12:52:27.386 4b40 Recovering log #3
-2025/01/17-12:52:27.387 4b40 Reusing old log /home/cyberium/shubham/scribd_scraper/chrome-user-data/Default/Local Storage/leveldb/000003.log 
-2025/01/17-13:16:27.933 4b41 Level-0 table #5: started
-2025/01/17-13:16:27.934 4b41 Level-0 table #5: 11860 bytes OK
-2025/01/17-13:16:27.936 4b41 Delete type=0 #3
