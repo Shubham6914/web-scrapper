@@ -203,11 +203,12 @@ class SearchExecutionManager:
         - Boolean indicating if results are valid
         """
         try:
+            print("Starting result validation")
             # Wait for results container
             results_container = WebDriverWait(self.driver, self.search_config['wait_time']).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'div[class*="search-results"]'))
             )
-            
+            print("Found results container")
             # Check for "no results" message
             try:
                 no_results = self.driver.find_element(By.XPATH, "//div[contains(text(), 'No results for')]")
