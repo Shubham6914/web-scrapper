@@ -1,0 +1,47 @@
+{
+    "last_session": "20250117_125227",
+    "categories": {
+        "HEALTH_INSURANCE": {
+            "subcategories": {
+                "Medical_Insurance": {
+                    "patterns_tried": [
+                        "medical insurance covers injuries",
+                        "health insurance medical insurance illnesses",
+                        "health insurance medical coverage injuries",
+                        "health insurance medical medical expenses",
+                        "medical injuries conditions",
+                        "health insurance medical coverage illnesses",
+                        "medical covers conditions",
+                        "medical insurance illnesses",
+                        "health insurance medical policy medical expenses",
+                        "medical coverage injuries",
+                        "covers medical medical expenses",
+                        "medical policy conditions",
+                        "medical insurance covers medical expenses",
+                        "medical coverage illnesses",
+                        "medical covers illnesses",
+                        "medical medical expenses conditions",
+                        "health insurance medical insurance conditions",
+                        "health insurance medical insurance injuries",
+                        "medical covers medical expenses"
+                    ],
+                    "successful_patterns": [],
+                    "documents_found": 0,
+                    "completed": false
+                }
+            },
+            "completed": false
+        }
+    },
+    "statistics": {
+        "total_searches": 19,
+        "successful_searches": 0,
+        "failed_searches": 19,
+        "documents_found": 0
+    },
+    "current_position": {
+        "category": "HEALTH_INSURANCE",
+        "subcategory": "Medical_Insurance",
+        "pattern_index": 0
+    }
+}
