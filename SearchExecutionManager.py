@@ -127,10 +127,7 @@ class SearchExecutionManager:
             search_input.send_keys(Keys.RETURN)
             
             # Wait for results to load
-            wait = WebDriverWait(self.driver, 10)
-            wait.until(EC.presence_of_all_elements_located(
-                (By.CSS_SELECTOR, 'a[class^="FluidCell-module_linkOverlay"]')
-            ))
+            time.sleep(3)  # Add small delay
             
             # Get all document links
             elements = self.driver.find_elements(
@@ -139,9 +136,13 @@ class SearchExecutionManager:
             urls = []
             
             for element in elements:
-                url = element.get_attribute('href')
-                if url and 'www.scribd.com/document/' in url:
-                    urls.append(url)
+                try:
+                    url = element.get_attribute('href')
+                    if url and 'www.scribd.com/document/' in url:
+                        urls.append(url)
+                except Exception as e:
+                    print(f"Error getting URL: {str(e)}")
+                    continue
             
             if urls:
                 print(f"Found {len(urls)} document URLs")

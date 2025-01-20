@@ -88,48 +88,99 @@ class ScribdScraper:
                 return
 
             # Execute search patterns
+            self.config_manager.log_message("Starting search execution...")
             search_results = self.search_executor.execute_search_sequence()
             
             if not search_results:
                 self.config_manager.log_message("No search results found")
                 return
 
+            # Log search results details
+            self.config_manager.log_message(f"Search results type: {type(search_results)}")
+            self.config_manager.log_message(f"Search results keys: {search_results.keys() if isinstance(search_results, dict) else 'Not a dict'}")
+            
+            if 'urls' in search_results:
+                total_urls = len(search_results['urls'])
+                self.config_manager.log_message(f"Total URLs found: {total_urls}")
+                
+                # Sample first few URLs for verification
+                if total_urls > 0:
+                    sample_urls = search_results['urls'][:3]
+                    self.config_manager.log_message("Sample URLs:")
+                    for idx, url in enumerate(sample_urls):
+                        self.config_manager.log_message(f"URL {idx + 1}: {url}")
+
             # Process search results
+            self.config_manager.log_message("Starting to process search results...")
             self.process_search_results(search_results)
 
             # Print final statistics
+            self.config_manager.log_message("Processing completed. Generating final statistics...")
             self.print_final_stats()
 
         except Exception as e:
             self.config_manager.log_message(f"Critical error in main execution: {str(e)}")
+            # Log the full error traceback
+            import traceback
+            self.config_manager.log_message(f"Error traceback: {traceback.format_exc()}")
         finally:
+            self.config_manager.log_message("Starting cleanup...")
             self.cleanup()
+            self.config_manager.log_message("Cleanup completed")
 
     def process_search_results(self, search_results):
         """Process the search results and download documents"""
         try:
-            if not search_results or 'urls' not in search_results:
-                self.config_manager.log_message("No search results to process")
+            self.config_manager.log_message("Starting to process search results")
+            self.config_manager.log_message(f"Search results type: {type(search_results)}")
+            
+            if not search_results:
+                self.config_manager.log_message("Search results is None or empty")
+                return
+                
+            self.config_manager.log_message(f"Search results keys: {search_results.keys() if isinstance(search_results, dict) else 'Not a dict'}")
+            
+            if 'urls' not in search_results:
+                self.config_manager.log_message("No 'urls' key in search results")
                 return
                 
             urls = search_results['urls']
-            self.config_manager.log_message(f"Found {len(urls)} documents to process")
+            total_urls = len(urls)
+            self.config_manager.log_message(f"Found {total_urls} total documents to process")
             
-            for url in urls:
-                if self.should_process_url(url):
-                    self.config_manager.log_message(f"Processing URL: {url}")
+            # Process each URL
+            for index, url in enumerate(urls):
+                try:
+                    self.config_manager.log_message(f"Processing URL {index + 1}/{total_urls}: {url}")
+                    
+                    if not self.should_process_url(url):
+                        self.config_manager.log_message(f"Skipping already processed URL: {url}")
+                        continue
+                    
+                    # Navigate to document page
+                    self.driver.get(url)
+                    time.sleep(3)  # Wait for page load
+                    
+                    # Attempt download
+                    self.config_manager.log_message(f"Attempting to download: {url}")
                     success = self.download_manager.download_document(url)
                     
                     if success:
                         self.mark_url_processed(url)
                         self.config_manager.log_message(f"Successfully downloaded: {url}")
+                    else:
+                        self.config_manager.log_message(f"Failed to download: {url}")
                     
                     # Add delay between downloads
                     time.sleep(5)
+                    
+                except Exception as e:
+                    self.config_manager.log_message(f"Error processing URL {url}: {str(e)}")
+                    continue
 
         except Exception as e:
             self.config_manager.log_message(f"Error processing search results: {str(e)}")
-            
+                
     def should_process_url(self, url):
         """Check if URL should be processed"""
         if 'www.scribd.com/document/' not in url:

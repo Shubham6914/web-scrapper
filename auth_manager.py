@@ -17,9 +17,11 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 import time
 import random
 
-# helpul imports
-from decouple import config
+from dotenv import load_dotenv
+import os
 
+# Load environment variables from .env file
+load_dotenv()
 class AuthManager:
     def __init__(self, driver, config_manager):
         """
@@ -33,8 +35,8 @@ class AuthManager:
         self.config_manager = config_manager
         self.wait_time = 10
         self.credentials = {
-            'username': config('EMAIL_USERNAME'),
-            'password': config('EMAIL_PASSWORD')
+            'username': os.getenv('EMAIL_USERNAME'),
+            'password': os.getenv('EMAIL_PASSWORD')
         }
 
     def random_sleep(self):
