@@ -171,16 +171,10 @@ cython_debug/
 .pypirc
 
 # Folders to ignore
-chrome-user-data/
-files/
-logs/
-myvenv/
-__pycache__/
-.pytest_cache/
-bin/
-include/
-lib/
-lib64/
+chrome-user-data
+files
+logs
+myvenv
 
 # Files to ignore
 download_reports.xlsx
@@ -201,3 +195,7 @@ processed_urls.txt
 
 # Ignore compiled Python files
 *.cpython-*.pyc
+
+
+# Compiled Python bytecode
+*.py[cod]
