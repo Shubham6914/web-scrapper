@@ -52,64 +52,136 @@ class SearchExecutionManager:
         self.validator = ValidationManager()
 
     def execute_search_sequence(self):
+        """
+        Main method to execute the search sequence one pattern at a time
+        Returns: Dictionary containing single pattern results and status
+        """
+        # Get resume point if any
         resume_point = self.progress_tracker.get_resume_point()
-        document_urls = []  # Store all found URLs
         
         try:
+            # Iterate through each insurance category
             for category, subcategories in self.search_patterns.items():
+                # Skip categories until resume point if exists
                 if resume_point['category'] and category != resume_point['category']:
                     continue
                     
                 self.current_progress['category'] = category
-                print(f"\nProcessing category: {category}")
+                print(f"\n=== Processing Category: {category} ===")
                 
+                # Process each subcategory
                 for subcategory, patterns in subcategories.items():
+                    # Skip subcategories until resume point if exists
                     if resume_point['subcategory'] and subcategory != resume_point['subcategory']:
                         continue
                         
                     self.current_progress['subcategory'] = subcategory
                     print(f"\nProcessing subcategory: {subcategory}")
                     
+                    current_pattern = resume_point.get('pattern')
+
+                    # Check if subcategory is already completed
+                    if self.progress_tracker.is_pattern_completed(category, subcategory,current_pattern):
+                        print(f"Subcategory {subcategory} already completed, moving to next...")
+                        continue
+                    
+                    # Execute patterns one at a time
                     for pattern_index, pattern in enumerate(patterns):
+                        # Skip patterns until resume point if exists
                         if resume_point['pattern_index'] and pattern_index < resume_point['pattern_index']:
                             continue
                             
                         self.current_progress['pattern_index'] = pattern_index
                         
+                        # Check if pattern was already processed
+                        if self.progress_tracker.is_pattern_completed(category, subcategory, pattern):
+                            print(f"Pattern '{pattern}' already processed, moving to next...")
+                            continue
+                        
+                        print(f"\nProcessing pattern: {pattern}")
+                        
                         # Execute search with current pattern
-                        search_success, urls = self.search_with_pattern(pattern)
+                        search_success, results = self.search_with_pattern(pattern)
                         
-                        if search_success and urls:
-                            document_urls.extend(urls)  # Add found URLs to list
+                        if search_success and results:
+                            print(f"Found {len(results)} URLs for pattern '{pattern}'")
                             
-                        # Update progress
-                        self.progress_tracker.update_search_progress(
-                            category=category,
-                            subcategory=subcategory,
-                            pattern=pattern,
-                            success=search_success,
-                            documents=len(urls) if urls else 0
-                        )
-                        
-                        if search_success:
-                            self.current_progress['successful_patterns'].add(pattern)
-                        
-                        self.track_progress()
-                        
-                        if len(self.current_progress['successful_patterns']) >= self.search_config['min_results']:
-                            break
+                            # Update progress tracker
+                            self.progress_tracker.update_search_progress(
+                                category=category,
+                                subcategory=subcategory,
+                                pattern=pattern,
+                                success=search_success,
+                                documents=len(results)
+                            )
+                            
+                            # Return results for this pattern
+                            return {
+                                'category': category,
+                                'subcategory': subcategory,
+                                'pattern': pattern,
+                                'pattern_index': pattern_index,
+                                'urls': results,
+                                'total_urls': len(results),
+                                'status': 'pattern_ready_for_download'
+                            }
+                        else:
+                            print(f"No results found for pattern '{pattern}'")
+                            self.progress_tracker.update_search_progress(
+                                category=category,
+                                subcategory=subcategory,
+                                pattern=pattern,
+                                success=False,
+                                documents=0
+                            )
                     
+                    # If all patterns for subcategory are processed
+                    print(f"All patterns processed for {subcategory}")
+                    self.progress_tracker.mark_subcategory_complete(category, subcategory)
                     self.current_progress['successful_patterns'].clear()
                 
+                # Print progress report after each category
                 self.progress_tracker.print_progress_report()
             
-            return {'urls': document_urls}  # Return all found URLs
-            
+            # If we reach here, all categories are processed
+            print("\nAll categories and patterns processed")
+            return None
+                    
         except Exception as e:
             print(f"Error in search execution: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             self.progress_tracker.save_progress()
             return None
+
+    def is_pattern_completed(self, category, subcategory, pattern):
+        """Check if pattern has been processed and downloads completed"""
+        try:
+            download_status = self.progress_tracker.get_pattern_status(category, subcategory, pattern)
+            return download_status and download_status.get('status') == 'completed'
+        except Exception:
+            return False
+
     
+
+    def is_subcategory_completed(self, category, subcategory):
+        """Check if subcategory is already completed"""
+        try:
+            category_data = self.progress_tracker.progress_data['categories'].get(category, {})
+            subcategory_data = category_data.get('subcategories', {}).get(subcategory, {})
+            return subcategory_data.get('completed', False)
+        except Exception:
+            return False
+
+    def is_pattern_tried(self, category, subcategory, pattern):
+        """Check if pattern has already been tried for this subcategory"""
+        try:
+            category_data = self.progress_tracker.progress_data['categories'].get(category, {})
+            subcategory_data = category_data.get('subcategories', {}).get(subcategory, {})
+            patterns_tried = subcategory_data.get('patterns_tried', [])
+            return pattern in patterns_tried
+        except Exception:
+            return False
     
     def search_with_pattern(self, pattern):
         try:
@@ -139,6 +211,7 @@ class SearchExecutionManager:
                 try:
                     url = element.get_attribute('href')
                     if url and 'www.scribd.com/document/' in url:
+                        print(f"Found document URL: {url}")
                         urls.append(url)
                 except Exception as e:
                     print(f"Error getting URL: {str(e)}")

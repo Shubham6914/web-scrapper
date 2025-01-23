@@ -128,8 +128,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-.venv
+env
+venv
 env/
 venv/
 ENV/
@@ -199,3 +199,5 @@ processed_urls.txt
 
 # Compiled Python bytecode
 *.py[cod]
+__pycache__
+*.pyc

@@ -11,6 +11,7 @@ File verification and renaming
 Progress tracking and reporting
 Error handling and logging
 """
+import traceback
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -18,7 +19,7 @@ import os
 import time
 
 class DownloadManager:
-    def __init__(self, driver, config_manager, download_tracker, name_handler, report_manager):
+    def __init__(self, driver, config_manager, download_tracker, name_handler, report_manager, progress_tracker):
         """
         Initialize Download Manager
         
@@ -28,13 +29,16 @@ class DownloadManager:
         - download_tracker: DownloadTracker instance
         - name_handler: DocumentNameHandler instance
         - report_manager: DownloadReportManager instance
+        - progress_tracker: ProgressTracker instance  # New parameter
         """
         self.driver = driver
         self.config_manager = config_manager
         self.download_tracker = download_tracker
         self.name_handler = name_handler
         self.report_manager = report_manager
+        self.progress_tracker = progress_tracker  # Add progress tracker
         self.wait = WebDriverWait(self.driver, 10)
+        self.retry_limit = 2  # Add retry limit
 
     def get_document_title(self):
         """Extract and clean document title"""
@@ -180,34 +184,142 @@ class DownloadManager:
         except Exception as e:
             self.config_manager.log_message(f"Error during file verification: {str(e)}")
             return False
+        
+        
+    def log_download_error(self, url, error_details):
+        """Log detailed error information"""
+        error_message = f"""
+            === Download Error ===
+            URL: {url}
+            Error Type: {error_details['error_type']}
+            Error Message: {error_details['error_message']}
+            Traceback:
+            {error_details['traceback']}
+            ===================
+            """
+        self.config_manager.log_message(error_message)
+        
+        
+    def log_download_status(self, result):
+        """Log detailed download status"""
+        status = "SUCCESS" if result['success'] else "FAILED"
+        message = f"""
+            === Download Status: {status} ===
+            URL: {result['url']}
+            Document Title: {result['document_title']}
+            Filename: {result['filename']}
+            Download Time: {result.get('download_time', 'N/A')}
+            File Size: {result.get('file_size', 'N/A')}
+            Pattern Info:
+            - Category: {result['pattern_info']['category']}
+            - Subcategory: {result['pattern_info']['subcategory']}
+            - Pattern: {result['pattern_info']['pattern']}
+            Error: {result.get('error', 'None')}
+            ========================
+            """
+        self.config_manager.log_message(message)
 
-    def download_document(self, url):
+
+        
+    def download_document(self, url, category=None, subcategory=None, pattern=None, pattern_key=None):
         """
-        Main method to handle complete document download process
+        Main method to handle complete document download process with pattern tracking
+        
+        Parameters:
+        - url: URL to download
+        - category: Current category
+        - subcategory: Current subcategory
+        - pattern: Current search pattern
+        - pattern_key: Pattern tracking key
         
         Returns:
-        - Boolean indicating download success
+        - Dictionary containing download status and details
         """
+        result = {
+            'success': False,
+            'url': url,
+            'document_title': None,
+            'filename': None,
+            'error': None,
+            'retry_count': 0,
+            'download_time': None,
+            'file_size': None,
+            'pattern_info': {
+                'category': category,
+                'subcategory': subcategory,
+                'pattern': pattern,
+                'pattern_key': pattern_key
+            }
+        }
+
         try:
-            # Navigate to document page
+            start_time = time.time()
+            
+            # Navigation
+            self.config_manager.log_message(f"Starting download for URL: {url}")
             self.driver.get(url)
             self.driver.execute_script('document.body.style.zoom = "200%";')
             
             # Get document title
             document_title = self.get_document_title()
+            result['document_title'] = document_title
             
-            # Find and click download button
+            # Handle download button
             if not self.find_and_click_download_button():
-                return False
+                result['error'] = "Failed to find or click download button"
+                return result
             
-            # Handle download modal
+            # Handle modal
             cleaned_title, download_url = self.handle_download_modal(document_title)
             if not cleaned_title:
-                return False
+                result['error'] = "Failed to handle download modal"
+                return result
             
-            # Verify and rename downloaded file
-            return self.verify_and_rename_file(cleaned_title, url)
+            result['filename'] = cleaned_title
             
+            # Verify and rename file
+            success = self.verify_and_rename_file(cleaned_title, url)
+            if success:
+                result['success'] = True
+                result['download_time'] = time.time() - start_time
+                
+                # Get file size
+                try:
+                    file_path = os.path.join(self.config_manager.download_dir, cleaned_title)
+                    result['file_size'] = os.path.getsize(file_path)
+                except Exception as e:
+                    self.config_manager.log_message(f"Error getting file size: {str(e)}")
+                
+                # Update pattern progress if tracking info provided
+                if all([category, subcategory, pattern_key]):
+                    self.progress_tracker.update_pattern_progress(
+                        category, subcategory, pattern_key, url, True
+                    )
+            else:
+                result['error'] = "File verification or renaming failed"
+            
+            # Log detailed status
+            self.log_download_status(result)
+            
+            return result
+                
         except Exception as e:
-            self.config_manager.log_message(f"Error downloading document: {str(e)}")
-            return False
+            result['error'] = str(e)
+            result['success'] = False
+            
+            # Log error details
+            error_details = {
+                'error_type': type(e).__name__,
+                'error_message': str(e),
+                'traceback': traceback.format_exc()
+            }
+            self.log_download_error(url, error_details)
+            
+            # Update pattern progress if tracking info provided
+            if all([category, subcategory, pattern_key]):
+                self.progress_tracker.update_pattern_progress(
+                    category, subcategory, pattern_key, url, False
+                )
+            
+            return result
+
