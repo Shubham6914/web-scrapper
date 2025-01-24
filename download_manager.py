@@ -224,16 +224,6 @@ class DownloadManager:
     def download_document(self, url, category=None, subcategory=None, pattern=None, pattern_key=None):
         """
         Main method to handle complete document download process with pattern tracking
-        
-        Parameters:
-        - url: URL to download
-        - category: Current category
-        - subcategory: Current subcategory
-        - pattern: Current search pattern
-        - pattern_key: Pattern tracking key
-        
-        Returns:
-        - Dictionary containing download status and details
         """
         result = {
             'success': False,
@@ -255,8 +245,17 @@ class DownloadManager:
         try:
             start_time = time.time()
             
+            # Log pattern information at start
+            self.config_manager.log_message(f"""
+    Starting download with pattern info:
+    - Category: {category}
+    - Subcategory: {subcategory}
+    - Pattern: {pattern}
+    - Pattern Key: {pattern_key}
+    - URL: {url}
+            """)
+            
             # Navigation
-            self.config_manager.log_message(f"Starting download for URL: {url}")
             self.driver.get(url)
             self.driver.execute_script('document.body.style.zoom = "200%";')
             
@@ -267,12 +266,20 @@ class DownloadManager:
             # Handle download button
             if not self.find_and_click_download_button():
                 result['error'] = "Failed to find or click download button"
+                if all([category, subcategory, pattern_key]):
+                    self.progress_tracker.update_pattern_progress(
+                        category, subcategory, pattern_key, url, False
+                    )
                 return result
             
             # Handle modal
             cleaned_title, download_url = self.handle_download_modal(document_title)
             if not cleaned_title:
                 result['error'] = "Failed to handle download modal"
+                if all([category, subcategory, pattern_key]):
+                    self.progress_tracker.update_pattern_progress(
+                        category, subcategory, pattern_key, url, False
+                    )
                 return result
             
             result['filename'] = cleaned_title
@@ -290,13 +297,19 @@ class DownloadManager:
                 except Exception as e:
                     self.config_manager.log_message(f"Error getting file size: {str(e)}")
                 
-                # Update pattern progress if tracking info provided
+                # Update pattern progress
                 if all([category, subcategory, pattern_key]):
                     self.progress_tracker.update_pattern_progress(
                         category, subcategory, pattern_key, url, True
                     )
+                    self.config_manager.log_message(f"Updated progress for pattern {pattern_key}: Success")
             else:
                 result['error'] = "File verification or renaming failed"
+                if all([category, subcategory, pattern_key]):
+                    self.progress_tracker.update_pattern_progress(
+                        category, subcategory, pattern_key, url, False
+                    )
+                    self.config_manager.log_message(f"Updated progress for pattern {pattern_key}: Failed")
             
             # Log detailed status
             self.log_download_status(result)
@@ -315,11 +328,11 @@ class DownloadManager:
             }
             self.log_download_error(url, error_details)
             
-            # Update pattern progress if tracking info provided
+            # Update pattern progress
             if all([category, subcategory, pattern_key]):
                 self.progress_tracker.update_pattern_progress(
                     category, subcategory, pattern_key, url, False
                 )
+                self.config_manager.log_message(f"Updated progress for pattern {pattern_key}: Failed (Error)")
             
             return result
-

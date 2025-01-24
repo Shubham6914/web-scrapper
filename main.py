@@ -140,11 +140,21 @@ class ScribdScraper:
                         for idx, url in enumerate(urls):
                             try:
                                 self.config_manager.log_message(f"Processing URL {idx + 1}/{len(urls)}")
-                                success = self.download_manager.download_document(url)
+                                success = self.download_manager.download_document(
+                                    url,
+                                    category=category,
+                                    subcategory=subcategory,
+                                    pattern=pattern,
+                                    pattern_key=pattern_key
+                                )
                                 
                                 # Update pattern progress
                                 self.progress_tracker.update_pattern_progress(
-                                    category, subcategory, pattern_key, url, success
+                                    category=category,
+                                    subcategory=subcategory,
+                                    pattern_key=pattern_key,
+                                    url=url,
+                                    success=success
                                 )
                                 
                                 # Add delay between downloads
@@ -153,7 +163,11 @@ class ScribdScraper:
                             except Exception as e:
                                 self.config_manager.log_message(f"Error downloading URL: {str(e)}")
                                 self.progress_tracker.update_pattern_progress(
-                                    category, subcategory, pattern_key, url, False
+                                    category=category,
+                                    subcategory=subcategory,
+                                    pattern_key=pattern_key,
+                                    url=url,
+                                    success=False
                                 )
 
                         # Get pattern status after processing
