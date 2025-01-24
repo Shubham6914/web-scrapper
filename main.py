@@ -108,7 +108,45 @@ class ScribdScraper:
             # Continuous processing loop
             while True:
                 try:
-                    # Execute search patterns
+                    # Check for in-progress patterns first
+                    resume_point = self.progress_tracker.get_resume_point()
+                    
+                    if resume_point.get('status') == 'resume' and resume_point.get('pending_urls'):
+                        # Resume downloading pending URLs
+                        self.config_manager.log_message("\n=== Resuming previous pattern... ===")
+                        self.config_manager.log_message(f"Category: {resume_point['category']}")
+                        self.config_manager.log_message(f"Subcategory: {resume_point['subcategory']}")
+                        self.config_manager.log_message(f"Pending URLs: {len(resume_point['pending_urls'])}")
+                        
+                        # Process pending URLs
+                        for idx, url in enumerate(resume_point['pending_urls']):
+                            try:
+                                self.config_manager.log_message(f"Processing pending URL {idx + 1}/{len(resume_point['pending_urls'])}")
+                                success = self.download_manager.download_document(
+                                    url,
+                                    category=resume_point['category'],
+                                    subcategory=resume_point['subcategory'],
+                                    pattern=resume_point['pattern'],
+                                    pattern_key=resume_point['pattern_key']
+                                )
+                                
+                                self.progress_tracker.update_pattern_progress(
+                                    category=resume_point['category'],
+                                    subcategory=resume_point['subcategory'],
+                                    pattern_key=resume_point['pattern_key'],
+                                    url=url,
+                                    success=success
+                                )
+                                
+                                time.sleep(2)
+                                
+                            except Exception as e:
+                                self.config_manager.log_message(f"Error processing pending URL: {str(e)}")
+                                continue
+                        
+                        continue  # Continue to next iteration to check for more pending patterns
+
+                    # Execute search patterns if no pending downloads
                     self.config_manager.log_message("\n=== Starting search execution... ===")
                     search_results = self.search_executor.execute_search_sequence()
                     
@@ -135,40 +173,40 @@ class ScribdScraper:
                             category, subcategory, pattern, urls
                         )
 
-                        # Process URLs for this pattern
-                        self.config_manager.log_message("\nStarting downloads for pattern...")
-                        for idx, url in enumerate(urls):
-                            try:
-                                self.config_manager.log_message(f"Processing URL {idx + 1}/{len(urls)}")
-                                success = self.download_manager.download_document(
-                                    url,
-                                    category=category,
-                                    subcategory=subcategory,
-                                    pattern=pattern,
-                                    pattern_key=pattern_key
-                                )
+                        # # Process URLs for this pattern
+                        # self.config_manager.log_message("\nStarting downloads for pattern...")
+                        # for idx, url in enumerate(urls):
+                        #     try:
+                        #         self.config_manager.log_message(f"Processing URL {idx + 1}/{len(urls)}")
+                        #         success = self.download_manager.download_document(
+                        #             url,
+                        #             category=category,
+                        #             subcategory=subcategory,
+                        #             pattern=pattern,
+                        #             pattern_key=pattern_key
+                        #         )
                                 
-                                # Update pattern progress
-                                self.progress_tracker.update_pattern_progress(
-                                    category=category,
-                                    subcategory=subcategory,
-                                    pattern_key=pattern_key,
-                                    url=url,
-                                    success=success
-                                )
+                        #         # Update pattern progress
+                        #         self.progress_tracker.update_pattern_progress(
+                        #             category=category,
+                        #             subcategory=subcategory,
+                        #             pattern_key=pattern_key,
+                        #             url=url,
+                        #             success=success
+                        #         )
                                 
-                                # Add delay between downloads
-                                time.sleep(2)
+                        #         # Add delay between downloads
+                        #         time.sleep(2)
                                 
-                            except Exception as e:
-                                self.config_manager.log_message(f"Error downloading URL: {str(e)}")
-                                self.progress_tracker.update_pattern_progress(
-                                    category=category,
-                                    subcategory=subcategory,
-                                    pattern_key=pattern_key,
-                                    url=url,
-                                    success=False
-                                )
+                        #     except Exception as e:
+                        #         self.config_manager.log_message(f"Error downloading URL: {str(e)}")
+                        #         self.progress_tracker.update_pattern_progress(
+                        #             category=category,
+                        #             subcategory=subcategory,
+                        #             pattern_key=pattern_key,
+                        #             url=url,
+                        #             success=False
+                        #         )
 
                         # Get pattern status after processing
                         pattern_status = self.progress_tracker.get_pattern_status(

@@ -56,14 +56,26 @@ class SearchExecutionManager:
         Main method to execute the search sequence one pattern at a time
         Returns: Dictionary containing single pattern results and status
         """
-        # Get resume point if any
-        resume_point = self.progress_tracker.get_resume_point()
-        
         try:
+            # Get resume point if any
+            resume_point = self.progress_tracker.get_resume_point()
+            
+            # Handle in-progress pattern with pending URLs
+            if resume_point.get('status') == 'resume' and resume_point.get('pending_urls'):
+                return {
+                    'category': resume_point['category'],
+                    'subcategory': resume_point['subcategory'],
+                    'pattern': resume_point['pattern'],
+                    'pattern_key': resume_point['pattern_key'],
+                    'urls': resume_point['pending_urls'],
+                    'total_urls': resume_point['total_pending'],
+                    'status': 'resume_downloads'
+                }
+
             # Iterate through each insurance category
             for category, subcategories in self.search_patterns.items():
                 # Skip categories until resume point if exists
-                if resume_point['category'] and category != resume_point['category']:
+                if resume_point.get('category') and category != resume_point['category']:
                     continue
                     
                 self.current_progress['category'] = category
@@ -72,30 +84,30 @@ class SearchExecutionManager:
                 # Process each subcategory
                 for subcategory, patterns in subcategories.items():
                     # Skip subcategories until resume point if exists
-                    if resume_point['subcategory'] and subcategory != resume_point['subcategory']:
+                    if resume_point.get('subcategory') and subcategory != resume_point['subcategory']:
                         continue
                         
                     self.current_progress['subcategory'] = subcategory
                     print(f"\nProcessing subcategory: {subcategory}")
                     
-                    current_pattern = resume_point.get('pattern')
-
-                    # Check if subcategory is already completed
-                    if self.progress_tracker.is_pattern_completed(category, subcategory,current_pattern):
-                        print(f"Subcategory {subcategory} already completed, moving to next...")
-                        continue
+                    # Get current pattern index
+                    current_pattern_index = resume_point.get('pattern_index', 0)
                     
                     # Execute patterns one at a time
                     for pattern_index, pattern in enumerate(patterns):
-                        # Skip patterns until resume point if exists
-                        if resume_point['pattern_index'] and pattern_index < resume_point['pattern_index']:
+                        # Skip patterns until resume point
+                        if pattern_index < current_pattern_index:
                             continue
                             
                         self.current_progress['pattern_index'] = pattern_index
                         
                         # Check if pattern was already processed
-                        if self.progress_tracker.is_pattern_completed(category, subcategory, pattern):
-                            print(f"Pattern '{pattern}' already processed, moving to next...")
+                        if self.progress_tracker.is_pattern_completed(
+                            category=category,
+                            subcategory=subcategory,
+                            pattern=pattern
+                        ):
+                            print(f"Pattern '{pattern}' already completed, moving to next...")
                             continue
                         
                         print(f"\nProcessing pattern: {pattern}")

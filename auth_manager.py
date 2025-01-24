@@ -118,10 +118,16 @@ class AuthManager:
             # Navigate to login page
             self.driver.get('https://auth.scribd.com/u/login')
             
-            # Enter credentials
-            self.driver.find_element(By.ID, 'username').send_keys(self.credentials['username'])
+            # Wait for login form to be visible
+            wait = WebDriverWait(self.driver, self.wait_time)
+            
+            # Enter credentials with explicit waits
+            username_field = wait.until(EC.presence_of_element_located((By.ID, 'username')))
+            username_field.send_keys(self.credentials['username'])
             self.config_manager.log_message('Entered username')
-            self.driver.find_element(By.ID, 'password').send_keys(self.credentials['password'])
+            
+            password_field = wait.until(EC.presence_of_element_located((By.ID, 'password')))
+            password_field.send_keys(self.credentials['password'])
             self.config_manager.log_message('Entered password')
 
             # Handle CAPTCHA if present
@@ -130,27 +136,48 @@ class AuthManager:
                 self.config_manager.log_message('Waited for 30 seconds after CAPTCHA')
                 self.random_sleep()
 
-            # Click login button
-            try:
-                self.driver.find_element(By.NAME, 'action').click()
-                self.config_manager.log_message('Clicked on action button')
-                
-                # Handle OTP if required
-                if self.handle_otp():
-                    self.config_manager.log_message('Successfully logged in after OTP verification')
-                    return True
+            # Try multiple selectors for login button
+            login_button_selectors = [
+                (By.NAME, 'action'),
+                (By.CSS_SELECTOR, 'button[type="submit"]'),
+                (By.CSS_SELECTOR, '.login_button'),
+                (By.XPATH, "//button[contains(text(), 'Log in')]"),
+                (By.XPATH, "//button[contains(text(), 'Sign in')]")
+            ]
 
-            except Exception as e:
-                self.config_manager.log_message(f"Error during login process: {str(e)}")
+            for selector_type, selector in login_button_selectors:
+                try:
+                    login_button = wait.until(EC.element_to_be_clickable((selector_type, selector)))
+                    login_button.click()
+                    self.config_manager.log_message(f'Clicked login button using selector: {selector}')
+                    break
+                except Exception:
+                    continue
+            else:
+                self.config_manager.log_message("Could not find login button with any selector")
                 return False
 
-            # Final login check
-            return self.check_login_status()
+            # Handle OTP if required
+            if self.handle_otp():
+                self.config_manager.log_message('Successfully logged in after OTP verification')
+                return True
+
+            # Final login check with extended wait
+            try:
+                WebDriverWait(self.driver, 20).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'a.sign_out_button'))
+                )
+                self.config_manager.log_message('Login successful - found sign out button')
+                return True
+            except TimeoutException:
+                self.config_manager.log_message('Login failed - could not verify successful login')
+                return False
 
         except Exception as e:
             self.config_manager.log_message(f"Critical error during login: {str(e)}")
             return False
-
+        
+        
     def ensure_login(self):
         """
         Ensure user is logged in, retry if necessary

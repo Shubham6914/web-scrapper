@@ -56,39 +56,44 @@ class ProgressTracker:
             self.log_message(f"Error loading progress: {str(e)}")
 
     def save_progress(self):
-        """Save current progress to file with detailed logging"""
+        """Save progress to file"""
         try:
-            # Create a summary of what's being saved
-            summary = {
-                'categories_saved': list(self.progress_data['pattern_data'].keys()),
-                'current_position': self.progress_data['current_position'],
-                'statistics': self.progress_data['statistics'],
-                'timestamp': self.get_timestamp()
-            }
-            
-            # Save the actual data
+            # Ensure all required keys exist
+            if 'pattern_data' not in self.progress_data:
+                self.progress_data['pattern_data'] = {}
+            if 'statistics' not in self.progress_data:
+                self.progress_data['statistics'] = {
+                    'total_patterns': 0,
+                    'completed_patterns': 0,
+                    'total_urls': 0,
+                    'downloaded_urls': 0,
+                    'failed_urls': 0
+                }
+            if 'current_position' not in self.progress_data:
+                self.progress_data['current_position'] = {
+                    'category': None,
+                    'subcategory': None,
+                    'pattern_index': 0,
+                    'current_pattern': None
+                }
+
+            # Save to file
             with open(self.progress_file, 'w') as f:
                 json.dump(self.progress_data, f, indent=4)
-            
-            # Create detailed log message
-            log_message = f"""
-    Progress Saved Successfully:
-    - Timestamp: {summary['timestamp']}
-    - Categories: {', '.join(summary['categories_saved']) if summary['categories_saved'] else 'None'}
-    - Current Position: 
-    * Category: {summary['current_position']['category']}
-    * Subcategory: {summary['current_position']['subcategory']}
-    * Pattern: {summary['current_position']['current_pattern']}
-    - Statistics:
-    * Total Patterns: {summary['statistics']['total_patterns']}
-    * Completed Patterns: {summary['statistics']['completed_patterns']}
-    * Total URLs: {summary['statistics']['total_urls']}
-    """
-            self.log_message(log_message)
-            
+
+            # Log save operation
+            self.log_message(f"""
+            Progress Saved:
+            - Timestamp: {self.get_timestamp()}
+            - Current Category: {self.progress_data['current_position']['category']}
+            - Current Subcategory: {self.progress_data['current_position']['subcategory']}
+            - Pattern Index: {self.progress_data['current_position']['pattern_index']}
+            - Downloaded URLs: {self.progress_data['statistics']['downloaded_urls']}
+            - Total URLs: {self.progress_data['statistics']['total_urls']}
+                    """)
+
         except Exception as e:
             self.log_message(f"Error saving progress: {str(e)}")
-
             
             
     def log_message(self, message: str):
@@ -176,35 +181,47 @@ class ProgressTracker:
         """Get the point where search should resume"""
         try:
             current_position = self.progress_data['current_position']
-            category = current_position['category']
-            subcategory = current_position['subcategory']
             
-            if category and subcategory:
-                # Check if there are any pending URLs in current pattern
-                patterns = self.progress_data['pattern_data'].get(category, {}).get(subcategory, {})
-                for pattern_key, data in patterns.items():
-                    if data['status'] == 'in_progress' and data['urls']['pending']:
-                        return {
-                            'category': category,
-                            'subcategory': subcategory,
-                            'pattern_index': current_position['pattern_index'],
-                            'pattern_key': pattern_key,
-                            'pending_urls': data['urls']['pending']
-                        }
+            # First check all categories for any in-progress patterns with pending URLs
+            for category, cat_data in self.progress_data['pattern_data'].items():
+                for subcategory, sub_data in cat_data.items():
+                    for pattern_key, data in sub_data.items():
+                        if data['status'] == 'in_progress' and data['urls']['pending']:
+                            self.log_message(f"""
+                                Found in-progress pattern:
+                                - Category: {category}
+                                - Subcategory: {subcategory}
+                                - Pattern: {data['pattern']}
+                                - Pending URLs: {len(data['urls']['pending'])}
+                                - Downloaded: {len(data['urls']['downloaded'])}
+                                """)
+                            return {
+                                'category': category,
+                                'subcategory': subcategory,
+                                'pattern_key': pattern_key,
+                                'pattern': data['pattern'],
+                                'pending_urls': data['urls']['pending'],
+                                'status': 'resume',
+                                'total_pending': len(data['urls']['pending']),
+                                'total_downloaded': len(data['urls']['downloaded'])
+                            }
             
-            # If no pending URLs, return current position to start next pattern
+            # If no pending URLs found, return current position for new pattern
+            self.log_message("No in-progress patterns found, continuing with next pattern")
             return {
-                'category': current_position['category'],
-                'subcategory': current_position['subcategory'],
-                'pattern_index': current_position['pattern_index']
+                'category': current_position.get('category'),
+                'subcategory': current_position.get('subcategory'),
+                'pattern_index': current_position.get('pattern_index', 0),
+                'status': 'new_pattern'
             }
-            
+                
         except Exception as e:
             self.log_message(f"Error getting resume point: {str(e)}")
             return {
                 'category': None,
                 'subcategory': None,
-                'pattern_index': 0
+                'pattern_index': 0,
+                'status': 'error'
             }
 
 
@@ -304,190 +321,211 @@ class ProgressTracker:
         except Exception as e:
             self.log_message(f"Error initializing pattern tracking: {str(e)}")
             return None
-
-    # def get_pattern_status(self, category: str, subcategory: str, pattern: str) -> dict:
-    #     """Get status of a specific pattern"""
-    #     try:
-    #         # Check if category exists
-    #         if category not in self.progress_data['pattern_data']:
-    #             return None
-                
-    #         # Check if subcategory exists
-    #         if subcategory not in self.progress_data['pattern_data'][category]:
-    #             return None
-                
-    #         # Look for pattern in subcategory
-    #         subcategory_patterns = self.progress_data['pattern_data'][category][subcategory]
-            
-    #         # Search for pattern in all pattern entries
-    #         for pattern_key, data in subcategory_patterns.items():
-    #             if data.get('pattern') == pattern:
-    #                 return data
-                    
-    #         return None
-            
-    #     except Exception as e:
-    #         self.log_message(f"Error getting pattern status: {str(e)}")
-    #         return None
-    # def update_pattern_progress(self, category: str, subcategory: str, pattern_key: str, url: str, success: bool):
-    #     """Update progress for a specific pattern"""
-    #     try:
-    #         if not self.progress_data['pattern_data'].get(category, {}).get(subcategory, {}).get(pattern_key):
-    #             self.log_message(f"Pattern key {pattern_key} not found for {category}/{subcategory}")
-    #             return
-                
-    #         pattern_data = self.progress_data['pattern_data'][category][subcategory][pattern_key]
-            
-    #         if success:
-    #             # Move URL from pending to downloaded
-    #             if url in pattern_data['urls']['pending']:
-    #                 pattern_data['urls']['pending'].remove(url)
-    #                 pattern_data['urls']['downloaded'].append(url)
-    #                 self.progress_data['statistics']['downloaded_urls'] += 1
-                    
-    #                 # Remove from failed if it was there
-    #                 if url in pattern_data['urls']['failed']:
-    #                     pattern_data['urls']['failed'].remove(url)
-                        
-    #                 # Check if pattern is complete
-    #                 if not pattern_data['urls']['pending']:
-    #                     pattern_data['status'] = 'completed'
-    #                     self.progress_data['statistics']['completed_patterns'] += 1
-    #                     self.log_message(f"Pattern {pattern_key} completed for {category}/{subcategory}")
-    #         else:
-    #             # Add to failed if not already there
-    #             if url not in pattern_data['urls']['failed']:
-    #                 pattern_data['urls']['failed'].append(url)
-    #                 self.progress_data['statistics']['failed_urls'] += 1
-            
-    #         self.save_progress()
-            
-    #     except Exception as e:
-    #         self.log_message(f"Error updating pattern progress: {str(e)}")
-    
-    def update_pattern_progress(self, category: str, subcategory: str, pattern_key: str, url: str, success: bool):
+        
+    def update_pattern_progress(self, category: str, subcategory: str, pattern_key: str, url: str, success: bool, force_complete: bool = False):
         """Update progress for a specific pattern"""
         try:
-            # Validate input parameters
+            # Validate input parameters and pattern existence
             if not all([category, subcategory, pattern_key, url]):
                 self.log_message("Missing required parameters for progress update")
                 return False
 
-            # Validate pattern exists
-            if not self.progress_data['pattern_data'].get(category, {}).get(subcategory, {}).get(pattern_key):
+            pattern_data = self.progress_data['pattern_data'].get(category, {}).get(subcategory, {}).get(pattern_key)
+            if not pattern_data:
                 self.log_message(f"Pattern key {pattern_key} not found for {category}/{subcategory}")
                 return False
                 
-            pattern_data = self.progress_data['pattern_data'][category][subcategory][pattern_key]
-            
-            # Log current state before update
+            # Log pre-update state
             self.log_message(f"""
-    Pattern Progress Update:
-    - Category: {category}
-    - Subcategory: {subcategory}
-    - Pattern Key: {pattern_key}
-    - URL: {url}
-    - Success: {success}
-    - Current Status: {pattern_data['status']}
-    - Pending URLs: {len(pattern_data['urls']['pending'])}
-    - Downloaded URLs: {len(pattern_data['urls']['downloaded'])}
-    - Failed URLs: {len(pattern_data['urls']['failed'])}
-            """)
+            Pattern Progress Pre-Update:
+            - Category: {category}
+            - Subcategory: {subcategory}
+            - Pattern: {pattern_data['pattern']}
+            - URL: {url}
+            - Current Status: {pattern_data['status']}
+            - Pending: {len(pattern_data['urls']['pending'])}
+            - Downloaded: {len(pattern_data['urls']['downloaded'])}
+                    """)
             
-            if success:
-                # Move URL from pending to downloaded
-                if url in pattern_data['urls']['pending']:
-                    pattern_data['urls']['pending'].remove(url)
-                    pattern_data['urls']['downloaded'].append(url)
-                    self.progress_data['statistics']['downloaded_urls'] += 1
+            # if success:
+            #     if url in pattern_data['urls']['pending']:
+            #         pattern_data['urls']['pending'].remove(url)
+            #         if url not in pattern_data['urls']['downloaded']:
+            #             pattern_data['urls']['downloaded'].append(url)
+            #             self.progress_data['statistics']['downloaded_urls'] += 1
                     
-                    # Remove from failed if it was there
-                    if url in pattern_data['urls']['failed']:
-                        pattern_data['urls']['failed'].remove(url)
+            #         # Check for pattern completion
+            #         if not pattern_data['urls']['pending']:
+            #             pattern_data['status'] = 'completed'
+            #             self.progress_data['statistics']['completed_patterns'] += 1
+            #             self.log_message(f"Pattern {pattern_key} completed!")
                         
-                    # Check if pattern is complete
-                    if not pattern_data['urls']['pending']:
-                        pattern_data['status'] = 'completed'
-                        self.progress_data['statistics']['completed_patterns'] += 1
-                        self.log_message(f"Pattern {pattern_key} completed for {category}/{subcategory}")
-            else:
-                # Add to failed if not already there
-                if url not in pattern_data['urls']['failed']:
-                    pattern_data['urls']['failed'].append(url)
-                    self.progress_data['statistics']['failed_urls'] += 1
+            #             # Update current position for next pattern
+            #             self.progress_data['current_position']['pattern_index'] += 1
+            # else:
+            #     if url not in pattern_data['urls']['failed']:
+            #         pattern_data['urls']['failed'].append(url)
+            #         self.progress_data['statistics']['failed_urls'] += 1
+
+            # # Save immediately after update
+            # self.save_progress()
             
-            self.save_progress()
+            # # Log post-update state
+            # self.log_message(f"""
+            # Pattern Progress Post-Update:
+            # - Status: {pattern_data['status']}
+            # - Pending: {len(pattern_data['urls']['pending'])}
+            # - Downloaded: {len(pattern_data['urls']['downloaded'])}
+            # - Failed: {len(pattern_data['urls']['failed'])}
+            # - Progress: {(len(pattern_data['urls']['downloaded'])/pattern_data['urls']['total'])*100:.2f}%
+            #         """)
+            
+                        # Update current position for next pattern
+           
+    
+            if success:
+                    if url in pattern_data['urls']['pending']:
+                        pattern_data['urls']['pending'].remove(url)
+                        pattern_data['urls']['downloaded'].append(url)
+                        self.progress_data['statistics']['downloaded_urls'] += 1
+                        
+                        # Check for completion (either natural or forced)
+                        if force_complete or len(pattern_data['urls']['downloaded']) >= 5:
+                            pattern_data['status'] = 'completed'
+                            self.progress_data['statistics']['completed_patterns'] += 1
+                            self.log_message(f"""
+            Pattern completed:
+            - Category: {category}
+            - Subcategory: {subcategory}
+            - Pattern: {pattern_data['pattern']}
+            - Downloaded: {len(pattern_data['urls']['downloaded'])}
+            - Reason: {'Force complete' if force_complete else '5 downloads reached'}
+                            """)
+                        self.progress_data['current_position']['pattern_index'] += 1
+            
             return True
                 
         except Exception as e:
             self.log_message(f"Error updating pattern progress: {str(e)}")
             return False
-
-    def get_pattern_status(self, category: str, subcategory: str, pattern: str) -> dict:
+        
+        
+    def get_pattern_status(self, category: str, subcategory: str, pattern: str = None, pattern_key: str = None) -> dict:
         """Get status of a specific pattern"""
         try:
-            # Validate input parameters
-            if not all([category, subcategory, pattern]):
-                self.log_message("Missing required parameters for getting pattern status")
+            # Validate basic parameters
+            if not category or not subcategory:
+                self.log_message("Missing category or subcategory")
                 return None
                 
+            if not pattern and not pattern_key:
+                self.log_message("Either pattern or pattern_key must be provided")
+                return None
+                    
             # Check if category exists
             if category not in self.progress_data['pattern_data']:
                 self.log_message(f"Category {category} not found in progress data")
                 return None
-                
+                    
             # Check if subcategory exists
             if subcategory not in self.progress_data['pattern_data'][category]:
                 self.log_message(f"Subcategory {subcategory} not found in category {category}")
                 return None
-                
-            # Look for pattern in subcategory
+                    
             subcategory_patterns = self.progress_data['pattern_data'][category][subcategory]
             
-            # Search for pattern in all pattern entries
-            for pattern_key, data in subcategory_patterns.items():
-                if data.get('pattern') == pattern:
-                    status_data = {
-                        'pattern_key': pattern_key,
-                        'status': data['status'],
-                        'downloaded_urls': data['urls']['downloaded'],
-                        'pending_urls': data['urls']['pending'],
-                        'failed_urls': data['urls']['failed'],
-                        'total_urls': len(data['urls']['downloaded']) + 
-                                    len(data['urls']['pending']) + 
-                                    len(data['urls']['failed'])
-                    }
-                    return status_data
-                        
-            self.log_message(f"Pattern {pattern} not found in {category}/{subcategory}")
-            return None
+            # If pattern_key is provided, use it directly
+            if pattern_key and pattern_key in subcategory_patterns:
+                data = subcategory_patterns[pattern_key]
+                return {
+                    'pattern_key': pattern_key,
+                    'pattern': data['pattern'],
+                    'status': data['status'],
+                    'downloaded_urls': data['urls']['downloaded'],
+                    'pending_urls': data['urls']['pending'],
+                    'failed_urls': data['urls']['failed'],
+                    'total_urls': len(data['urls']['downloaded']) + 
+                                len(data['urls']['pending']) + 
+                                len(data['urls']['failed'])
+                }
                 
+            # If pattern is provided, search for it
+            if pattern:
+                for key, data in subcategory_patterns.items():
+                    if data.get('pattern') == pattern:
+                        return {
+                            'pattern_key': key,
+                            'pattern': pattern,
+                            'status': data['status'],
+                            'downloaded_urls': data['urls']['downloaded'],
+                            'pending_urls': data['urls']['pending'],
+                            'failed_urls': data['urls']['failed'],
+                            'total_urls': len(data['urls']['downloaded']) + 
+                                        len(data['urls']['pending']) + 
+                                        len(data['urls']['failed'])
+                        }
+                        
+            self.log_message(f"Pattern not found in {category}/{subcategory}")
+            return None
+                    
         except Exception as e:
             self.log_message(f"Error getting pattern status: {str(e)}")
             return None
 
-    def is_pattern_completed(self, category: str, subcategory: str, pattern: str) -> bool:
+    def is_pattern_completed(self, category: str, subcategory: str, pattern: str = None, pattern_key: str = None) -> bool:
         """Check if a pattern's downloads are completed"""
         try:
-            pattern_status = self.get_pattern_status(category, subcategory, pattern)
-            return pattern_status and pattern_status['status']['state'] in ['completed', 'completed_with_failures']
+            pattern_status = self.get_pattern_status(
+                category=category, 
+                subcategory=subcategory, 
+                pattern=pattern,
+                pattern_key=pattern_key
+            )
+            return pattern_status and pattern_status['status'] == 'completed'
         except Exception as e:
             self.log_message(f"Error checking pattern completion: {str(e)}")
             return False
 
-    def get_next_pending_pattern(self, category: str, subcategory: str) -> dict:
+    def get_next_pending_pattern(self) -> dict:
         """Get next pattern that needs processing"""
         try:
-            patterns = self.progress_data['pattern_progress'].get(category, {}).get(subcategory, {})
-            for pattern_key, data in patterns.items():
-                if data['status']['state'] == 'in_progress':
-                    return {
-                        'pattern_key': pattern_key,
-                        'pattern_data': data
-                    }
+            for category, cat_data in self.progress_data['pattern_data'].items():
+                for subcategory, sub_data in cat_data.items():
+                    for pattern_key, data in sub_data.items():
+                        if data['status'] == 'in_progress':
+                            return {
+                                'category': category,
+                                'subcategory': subcategory,
+                                'pattern_key': pattern_key,
+                                'pattern': data['pattern'],
+                                'pending_urls': data['urls']['pending'],
+                                'downloaded_urls': data['urls']['downloaded'],
+                                'failed_urls': data['urls']['failed']
+                            }
             return None
         except Exception as e:
             self.log_message(f"Error getting next pending pattern: {str(e)}")
             return None
-        
-        
+    
+    def get_in_progress_pattern(self) -> dict:
+        """Get the first pattern that is in progress and has pending URLs"""
+        try:
+            for category, cat_data in self.progress_data['pattern_data'].items():
+                for subcategory, sub_data in cat_data.items():
+                    for pattern_key, pattern_data in sub_data.items():
+                        if (pattern_data['status'] == 'in_progress' and 
+                            pattern_data['urls']['pending']):
+                            return {
+                                'category': category,
+                                'subcategory': subcategory,
+                                'pattern_key': pattern_key,
+                                'pattern': pattern_data['pattern'],
+                                'pending_urls': pattern_data['urls']['pending'],
+                                'total_pending': len(pattern_data['urls']['pending'])
+                            }
+            return None
+        except Exception as e:
+            self.log_message(f"Error getting in-progress pattern: {str(e)}")
+            return None
+
+            
