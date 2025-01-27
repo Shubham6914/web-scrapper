@@ -52,15 +52,26 @@ class SearchExecutionManager:
         self.validator = ValidationManager()
 
     def execute_search_sequence(self):
-        """
-        Main method to execute the search sequence one pattern at a time
-        Returns: Dictionary containing single pattern results and status
-        """
+        """Main method to execute the search sequence"""
         try:
-            # Get resume point if any
+            # Get resume point
             resume_point = self.progress_tracker.get_resume_point()
             
-            # Handle in-progress pattern with pending URLs
+          
+            
+            # Get all used patterns from progress data
+            used_patterns = set()
+            pattern_data = self.progress_tracker.progress_data.get('pattern_data', {})
+            for category_data in pattern_data.values():
+                for subcategory_data in category_data.values():
+                    for pattern_info in subcategory_data.values():
+                        if pattern_info['status'] == 'completed':  # Only add completed patterns
+                            used_patterns.add(pattern_info['pattern'])
+            
+            print(f"Already completed patterns: {used_patterns}")
+                
+            
+            # Handle in-progress patterns first
             if resume_point.get('status') == 'resume' and resume_point.get('pending_urls'):
                 return {
                     'category': resume_point['category'],
@@ -72,62 +83,43 @@ class SearchExecutionManager:
                     'status': 'resume_downloads'
                 }
 
-            # Iterate through each insurance category
+            current_pattern_index = resume_point.get('pattern_index', 0)
+            print(f"\nStarting search with pattern index: {current_pattern_index}")
+            
+            # Iterate through patterns
             for category, subcategories in self.search_patterns.items():
-                # Skip categories until resume point if exists
                 if resume_point.get('category') and category != resume_point['category']:
                     continue
                     
-                self.current_progress['category'] = category
-                print(f"\n=== Processing Category: {category} ===")
-                
-                # Process each subcategory
                 for subcategory, patterns in subcategories.items():
-                    # Skip subcategories until resume point if exists
                     if resume_point.get('subcategory') and subcategory != resume_point['subcategory']:
                         continue
-                        
-                    self.current_progress['subcategory'] = subcategory
-                    print(f"\nProcessing subcategory: {subcategory}")
                     
-                    # Get current pattern index
-                    current_pattern_index = resume_point.get('pattern_index', 0)
+                    patterns_to_process = patterns[current_pattern_index:]
+                    if not patterns_to_process:
+                        print(f"No more patterns to process for {category}/{subcategory}")
+                        continue
                     
-                    # Execute patterns one at a time
-                    for pattern_index, pattern in enumerate(patterns):
-                        # Skip patterns until resume point
-                        if pattern_index < current_pattern_index:
+                    for pattern_index, pattern in enumerate(patterns_to_process, start=current_pattern_index):
+                        # Skip if pattern was already used
+                        if pattern in used_patterns:
+                            print(f"Pattern '{pattern}' already used, skipping...")
                             continue
                             
-                        self.current_progress['pattern_index'] = pattern_index
-                        
-                        # Check if pattern was already processed
-                        if self.progress_tracker.is_pattern_completed(
-                            category=category,
-                            subcategory=subcategory,
-                            pattern=pattern
-                        ):
-                            print(f"Pattern '{pattern}' already completed, moving to next...")
+                        # Check if pattern was already completed
+                        if self.progress_tracker.is_pattern_completed(category, subcategory, pattern):
+                            used_patterns.add(pattern)
+                            print(f"Pattern '{pattern}' already completed, skipping...")
                             continue
                         
-                        print(f"\nProcessing pattern: {pattern}")
+                        print(f"\nProcessing new pattern: {pattern}")
+                        print(f"Pattern index: {pattern_index}")
                         
-                        # Execute search with current pattern
                         search_success, results = self.search_with_pattern(pattern)
                         
                         if search_success and results:
-                            print(f"Found {len(results)} URLs for pattern '{pattern}'")
-                            
-                            # Update progress tracker
-                            self.progress_tracker.update_search_progress(
-                                category=category,
-                                subcategory=subcategory,
-                                pattern=pattern,
-                                success=search_success,
-                                documents=len(results)
-                            )
-                            
-                            # Return results for this pattern
+                            used_patterns.add(pattern)
+                            print(f"Found {len(results)} results for pattern: {pattern}")
                             return {
                                 'category': category,
                                 'subcategory': subcategory,
@@ -137,33 +129,23 @@ class SearchExecutionManager:
                                 'total_urls': len(results),
                                 'status': 'pattern_ready_for_download'
                             }
-                        else:
-                            print(f"No results found for pattern '{pattern}'")
-                            self.progress_tracker.update_search_progress(
-                                category=category,
-                                subcategory=subcategory,
-                                pattern=pattern,
-                                success=False,
-                                documents=0
-                            )
+                        
+                        # Update progress even if no results
+                        self.progress_tracker.update_search_progress(
+                            category=category,
+                            subcategory=subcategory,
+                            pattern=pattern,
+                            success=search_success,
+                            documents=len(results) if results else 0
+                        )
                     
-                    # If all patterns for subcategory are processed
-                    print(f"All patterns processed for {subcategory}")
-                    self.progress_tracker.mark_subcategory_complete(category, subcategory)
-                    self.current_progress['successful_patterns'].clear()
-                
-                # Print progress report after each category
-                self.progress_tracker.print_progress_report()
-            
-            # If we reach here, all categories are processed
-            print("\nAll categories and patterns processed")
+            print("No more patterns to process")
             return None
-                    
+                
         except Exception as e:
             print(f"Error in search execution: {str(e)}")
             import traceback
             print(f"Traceback: {traceback.format_exc()}")
-            self.progress_tracker.save_progress()
             return None
 
     def is_pattern_completed(self, category, subcategory, pattern):

@@ -322,10 +322,10 @@ class ProgressTracker:
             self.log_message(f"Error initializing pattern tracking: {str(e)}")
             return None
         
-    def update_pattern_progress(self, category: str, subcategory: str, pattern_key: str, url: str, success: bool, force_complete: bool = False):
+    def update_pattern_progress(self, category: str, subcategory: str, pattern_key: str, url: str, success: bool):
         """Update progress for a specific pattern"""
         try:
-            # Validate input parameters and pattern existence
+            # Validate input parameters
             if not all([category, subcategory, pattern_key, url]):
                 self.log_message("Missing required parameters for progress update")
                 return False
@@ -335,81 +335,69 @@ class ProgressTracker:
                 self.log_message(f"Pattern key {pattern_key} not found for {category}/{subcategory}")
                 return False
                 
-            # Log pre-update state
+            # Log current state before update
             self.log_message(f"""
-            Pattern Progress Pre-Update:
+            Current Pattern State:
             - Category: {category}
             - Subcategory: {subcategory}
             - Pattern: {pattern_data['pattern']}
-            - URL: {url}
-            - Current Status: {pattern_data['status']}
+            - Downloaded: {len(pattern_data['urls']['downloaded'])}
             - Pending: {len(pattern_data['urls']['pending'])}
-            - Downloaded: {len(pattern_data['urls']['downloaded'])}
+            - Status: {pattern_data['status']}
                     """)
-            
-            # if success:
-            #     if url in pattern_data['urls']['pending']:
-            #         pattern_data['urls']['pending'].remove(url)
-            #         if url not in pattern_data['urls']['downloaded']:
-            #             pattern_data['urls']['downloaded'].append(url)
-            #             self.progress_data['statistics']['downloaded_urls'] += 1
-                    
-            #         # Check for pattern completion
-            #         if not pattern_data['urls']['pending']:
-            #             pattern_data['status'] = 'completed'
-            #             self.progress_data['statistics']['completed_patterns'] += 1
-            #             self.log_message(f"Pattern {pattern_key} completed!")
-                        
-            #             # Update current position for next pattern
-            #             self.progress_data['current_position']['pattern_index'] += 1
-            # else:
-            #     if url not in pattern_data['urls']['failed']:
-            #         pattern_data['urls']['failed'].append(url)
-            #         self.progress_data['statistics']['failed_urls'] += 1
-
-            # # Save immediately after update
-            # self.save_progress()
-            
-            # # Log post-update state
-            # self.log_message(f"""
-            # Pattern Progress Post-Update:
-            # - Status: {pattern_data['status']}
-            # - Pending: {len(pattern_data['urls']['pending'])}
-            # - Downloaded: {len(pattern_data['urls']['downloaded'])}
-            # - Failed: {len(pattern_data['urls']['failed'])}
-            # - Progress: {(len(pattern_data['urls']['downloaded'])/pattern_data['urls']['total'])*100:.2f}%
-            #         """)
-            
-                        # Update current position for next pattern
-           
-    
+                
             if success:
-                    if url in pattern_data['urls']['pending']:
-                        pattern_data['urls']['pending'].remove(url)
-                        pattern_data['urls']['downloaded'].append(url)
-                        self.progress_data['statistics']['downloaded_urls'] += 1
+                if url in pattern_data['urls']['pending']:
+                    pattern_data['urls']['pending'].remove(url)
+                    pattern_data['urls']['downloaded'].append(url)
+                    self.progress_data['statistics']['downloaded_urls'] += 1
+                    
+                    # Check if we've reached 5 downloads
+                    if len(pattern_data['urls']['downloaded']) >= 5:
+                        pattern_data['status'] = 'completed'
+                        self.progress_data['statistics']['completed_patterns'] += 1
                         
-                        # Check for completion (either natural or forced)
-                        if force_complete or len(pattern_data['urls']['downloaded']) >= 5:
-                            pattern_data['status'] = 'completed'
-                            self.progress_data['statistics']['completed_patterns'] += 1
-                            self.log_message(f"""
-            Pattern completed:
-            - Category: {category}
-            - Subcategory: {subcategory}
+                        # Update pattern index and mark completion
+                        current_index = self.progress_data['current_position']['pattern_index']
+                        self.progress_data['current_position'].update({
+                            'pattern_index': current_index + 1,
+                            'current_pattern': None  # Reset current pattern
+                        })
+                        
+                        self.log_message(f"""
+                        Pattern Completed:
+                        - Category: {category}
+                        - Subcategory: {subcategory}
+                        - Pattern: {pattern_data['pattern']}
+                        - Downloaded: {len(pattern_data['urls']['downloaded'])}
+                        - New Pattern Index: {current_index + 1}
+                        - Status: Completed
+                                            """)
+                                
+                    else:
+                        if url not in pattern_data['urls']['failed']:
+                            pattern_data['urls']['failed'].append(url)
+                            self.progress_data['statistics']['failed_urls'] += 1
+            
+            # Save progress immediately
+            self.save_progress()
+            
+            # Log final state after update
+            self.log_message(f"""
+            Pattern Progress Updated:
             - Pattern: {pattern_data['pattern']}
+            - Status: {pattern_data['status']}
             - Downloaded: {len(pattern_data['urls']['downloaded'])}
-            - Reason: {'Force complete' if force_complete else '5 downloads reached'}
-                            """)
-                        self.progress_data['current_position']['pattern_index'] += 1
+            - Remaining: {len(pattern_data['urls']['pending'])}
+            - Failed: {len(pattern_data['urls']['failed'])}
+                    """)
             
             return True
                 
         except Exception as e:
             self.log_message(f"Error updating pattern progress: {str(e)}")
+            self.log_message(f"Error details: {str(e.__class__.__name__)}: {str(e)}")
             return False
-        
-        
     def get_pattern_status(self, category: str, subcategory: str, pattern: str = None, pattern_key: str = None) -> dict:
         """Get status of a specific pattern"""
         try:

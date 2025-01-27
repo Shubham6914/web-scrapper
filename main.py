@@ -110,15 +110,15 @@ class ScribdScraper:
                 try:
                     # Check for in-progress patterns first
                     resume_point = self.progress_tracker.get_resume_point()
-                    
+
                     if resume_point.get('status') == 'resume' and resume_point.get('pending_urls'):
                         # Resume downloading pending URLs
                         self.config_manager.log_message("\n=== Resuming previous pattern... ===")
                         self.config_manager.log_message(f"Category: {resume_point['category']}")
                         self.config_manager.log_message(f"Subcategory: {resume_point['subcategory']}")
                         self.config_manager.log_message(f"Pending URLs: {len(resume_point['pending_urls'])}")
-                        
-                        # Process pending URLs
+
+                        downloaded_count = 0
                         for idx, url in enumerate(resume_point['pending_urls']):
                             try:
                                 self.config_manager.log_message(f"Processing pending URL {idx + 1}/{len(resume_point['pending_urls'])}")
@@ -129,7 +129,11 @@ class ScribdScraper:
                                     pattern=resume_point['pattern'],
                                     pattern_key=resume_point['pattern_key']
                                 )
-                                
+
+                                if success:
+                                    downloaded_count += 1
+                                    self.config_manager.log_message(f"Successfully downloaded {downloaded_count}/5 documents for this pattern")
+
                                 self.progress_tracker.update_pattern_progress(
                                     category=resume_point['category'],
                                     subcategory=resume_point['subcategory'],
@@ -137,19 +141,23 @@ class ScribdScraper:
                                     url=url,
                                     success=success
                                 )
-                                
+
+                                if downloaded_count >= 5:
+                                    self.config_manager.log_message("Reached 5 downloads limit, moving to next pattern")
+                                    break
+
                                 time.sleep(2)
-                                
+
                             except Exception as e:
                                 self.config_manager.log_message(f"Error processing pending URL: {str(e)}")
                                 continue
-                        
-                        continue  # Continue to next iteration to check for more pending patterns
+
+                        continue
 
                     # Execute search patterns if no pending downloads
                     self.config_manager.log_message("\n=== Starting search execution... ===")
                     search_results = self.search_executor.execute_search_sequence()
-                    
+
                     if not search_results:
                         self.config_manager.log_message("All patterns processed")
                         break
@@ -160,7 +168,7 @@ class ScribdScraper:
                     pattern = search_results['pattern']
                     pattern_index = search_results['pattern_index']
                     urls = search_results['urls']
-                    
+
                     self.config_manager.log_message(f"\nProcessing Pattern:")
                     self.config_manager.log_message(f"Category: {category}")
                     self.config_manager.log_message(f"Subcategory: {subcategory}")
@@ -173,55 +181,54 @@ class ScribdScraper:
                             category, subcategory, pattern, urls
                         )
 
-                        # # Process URLs for this pattern
-                        # self.config_manager.log_message("\nStarting downloads for pattern...")
-                        # for idx, url in enumerate(urls):
-                        #     try:
-                        #         self.config_manager.log_message(f"Processing URL {idx + 1}/{len(urls)}")
-                        #         success = self.download_manager.download_document(
-                        #             url,
-                        #             category=category,
-                        #             subcategory=subcategory,
-                        #             pattern=pattern,
-                        #             pattern_key=pattern_key
-                        #         )
-                                
-                        #         # Update pattern progress
-                        #         self.progress_tracker.update_pattern_progress(
-                        #             category=category,
-                        #             subcategory=subcategory,
-                        #             pattern_key=pattern_key,
-                        #             url=url,
-                        #             success=success
-                        #         )
-                                
-                        #         # Add delay between downloads
-                        #         time.sleep(2)
-                                
-                        #     except Exception as e:
-                        #         self.config_manager.log_message(f"Error downloading URL: {str(e)}")
-                        #         self.progress_tracker.update_pattern_progress(
-                        #             category=category,
-                        #             subcategory=subcategory,
-                        #             pattern_key=pattern_key,
-                        #             url=url,
-                        #             success=False
-                        #         )
+                        # Process URLs for this pattern
+                        self.config_manager.log_message("\nStarting downloads for pattern...")
+                        downloaded_count = 0
 
-                        # Get pattern status after processing
-                        pattern_status = self.progress_tracker.get_pattern_status(
-                            category, subcategory, pattern
-                        )
-                        
-                        if pattern_status:
-                            self.config_manager.log_message("\n=== Pattern Processing Results ===")
-                            self.config_manager.log_message(f"Downloaded: {len(pattern_status['downloaded_urls'])}")
-                            self.config_manager.log_message(f"Failed: {len(pattern_status['failed_urls'])}")
-                            self.config_manager.log_message(f"Status: {pattern_status['status']}")
+                        for idx, url in enumerate(urls):
+                            try:
+                                self.config_manager.log_message(f"Processing URL {idx + 1}/{len(urls)}")
+                                success = self.download_manager.download_document(
+                                    url,
+                                    category=category,
+                                    subcategory=subcategory,
+                                    pattern=pattern,
+                                    pattern_key=pattern_key
+                                )
 
-                    # Add delay before next pattern
-                    self.config_manager.log_message("\nWaiting before next pattern...")
-                    time.sleep(5)
+                                if success:
+                                    downloaded_count += 1
+                                    self.config_manager.log_message(f"Successfully downloaded {downloaded_count}/5 documents for this pattern")
+
+                                self.progress_tracker.update_pattern_progress(
+                                    category=category,
+                                    subcategory=subcategory,
+                                    pattern_key=pattern_key,
+                                    url=url,
+                                    success=success
+                                )
+
+                                if downloaded_count >= 5:
+                                    self.config_manager.log_message("Reached 5 downloads limit, moving to next pattern")
+                                    # Mark current pattern as completed
+                                    self.progress_tracker.update_pattern_progress(
+                                        category=category,
+                                        subcategory=subcategory,
+                                        pattern_key=pattern_key,
+                                        url=url,
+                                        success=True
+                                    )
+                                    break
+
+                                time.sleep(2)
+
+                            except Exception as e:
+                                self.config_manager.log_message(f"Error downloading URL: {str(e)}")
+                                continue
+
+                        # Add delay before next pattern
+                        self.config_manager.log_message("\nWaiting before next pattern...")
+                        time.sleep(5)
 
                 except Exception as e:
                     self.config_manager.log_message(f"Error processing pattern: {str(e)}")
@@ -240,7 +247,7 @@ class ScribdScraper:
             self.config_manager.log_message("Starting cleanup...")
             self.cleanup()
             self.config_manager.log_message("Cleanup completed")
-        
+            
     def process_search_results(self, search_results):
         """Process the search results and download documents"""
         try:
