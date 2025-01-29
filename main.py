@@ -142,8 +142,8 @@ class ScribdScraper:
                                     success=success
                                 )
 
-                                if downloaded_count >= 5:
-                                    self.config_manager.log_message("Reached 5 downloads limit, moving to next pattern")
+                                if downloaded_count >= 2:
+                                    self.config_manager.log_message("Reached 3 downloads limit, moving to next pattern")
                                     break
 
                                 time.sleep(2)
@@ -168,7 +168,53 @@ class ScribdScraper:
                     pattern = search_results['pattern']
                     pattern_index = search_results['pattern_index']
                     urls = search_results['urls']
-
+                
+                    
+                     # Check if pattern is unique
+                    if not self.progress_tracker.is_pattern_unique(pattern):
+                        self.config_manager.log_message(f"Pattern '{pattern}' already used, generating new pattern...")
+                        
+                    try:
+                        # Get patterns for this category/subcategory
+                        all_patterns = self.pattern_generator.generate_all_patterns()
+                        category_patterns = all_patterns.get(category, {}).get(subcategory, [])
+                        
+                        # Filter out already used patterns
+                        available_patterns = [
+                            p for p in category_patterns 
+                            if self.progress_tracker.is_pattern_unique(p)
+                        ]
+                        
+                        if available_patterns:
+                            import random
+                            new_pattern = random.choice(available_patterns)
+                            self.config_manager.log_message(f"Generated new pattern: {new_pattern}")
+                            
+                            # Use existing search_with_pattern function
+                            search_success, new_urls = self.search_executor.search_with_pattern(new_pattern)
+                            
+                            if search_success and new_urls:
+                                pattern = new_pattern
+                                urls = new_urls
+                                self.config_manager.log_message(f"New pattern search successful, found {len(urls)} URLs")
+                            else:
+                                self.config_manager.log_message("New pattern search failed, skipping...")
+                                continue
+                        else:
+                            self.config_manager.log_message(f"No more unique patterns available for {category}/{subcategory}")
+                            continue
+                    
+                    except Exception as e:
+                        self.config_manager.log_message(f"Error generating new pattern: {str(e)}")
+                        continue
+                        
+                    # if not new_pattern:
+                    #     self.config_manager.log_message(f"No more unique patterns available for {category}/{subcategory}")
+                    #     continue
+                        
+                    # Update pattern in search results
+                    pattern = new_pattern        
+                    
                     self.config_manager.log_message(f"\nProcessing Pattern:")
                     self.config_manager.log_message(f"Category: {category}")
                     self.config_manager.log_message(f"Subcategory: {subcategory}")
@@ -198,7 +244,7 @@ class ScribdScraper:
 
                                 if success:
                                     downloaded_count += 1
-                                    self.config_manager.log_message(f"Successfully downloaded {downloaded_count}/5 documents for this pattern")
+                                    self.config_manager.log_message(f"Successfully downloaded {downloaded_count}/2 documents for this pattern")
 
                                 self.progress_tracker.update_pattern_progress(
                                     category=category,
@@ -208,8 +254,8 @@ class ScribdScraper:
                                     success=success
                                 )
 
-                                if downloaded_count >= 5:
-                                    self.config_manager.log_message("Reached 5 downloads limit, moving to next pattern")
+                                if downloaded_count >= 2:
+                                    self.config_manager.log_message("Reached 2 downloads limit, moving to next pattern")
                                     # Mark current pattern as completed
                                     self.progress_tracker.update_pattern_progress(
                                         category=category,

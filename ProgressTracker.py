@@ -187,14 +187,7 @@ class ProgressTracker:
                 for subcategory, sub_data in cat_data.items():
                     for pattern_key, data in sub_data.items():
                         if data['status'] == 'in_progress' and data['urls']['pending']:
-                            self.log_message(f"""
-                                Found in-progress pattern:
-                                - Category: {category}
-                                - Subcategory: {subcategory}
-                                - Pattern: {data['pattern']}
-                                - Pending URLs: {len(data['urls']['pending'])}
-                                - Downloaded: {len(data['urls']['downloaded'])}
-                                """)
+                            self.log_message("pattern in progress found")
                             return {
                                 'category': category,
                                 'subcategory': subcategory,
@@ -353,7 +346,7 @@ class ProgressTracker:
                     self.progress_data['statistics']['downloaded_urls'] += 1
                     
                     # Check if we've reached 5 downloads
-                    if len(pattern_data['urls']['downloaded']) >= 5:
+                    if len(pattern_data['urls']['downloaded']) >= 2:
                         pattern_data['status'] = 'completed'
                         self.progress_data['statistics']['completed_patterns'] += 1
                         
@@ -516,4 +509,88 @@ class ProgressTracker:
             self.log_message(f"Error getting in-progress pattern: {str(e)}")
             return None
 
+    # Get all used patterns from progress data
+    
+    def get_used_patterns(self):
+        """
+        Retrieve completed pattern and add to used patterns
+        
+        Args:
+            category (str): Category name
+            subcategory (str): Subcategory name
+            pattern (str, optional): Pattern to check
+            pattern_key (str, optional): Pattern key to check
+        
+        Returns:
+            set: A set of completed patterns
+        """
+        used_patterns = set()
+        
+        try:
+            for category, cat_data in self.progress_data['pattern_data'].items():
+                for subcategory, sub_data in cat_data.items():
+                    for pattern_key, pattern_data in sub_data.items():
+                        if (pattern_data['status'] == 'completed'):
+                            prev_pattern = pattern_data['pattern']
+                            print(f"Prev pattern: {prev_pattern}")
+                            normalized_pattern = self._normalize_pattern(prev_pattern)
+                            print(f"Normalized pattern: {normalized_pattern}")
+                            used_patterns.add(normalized_pattern)
+            print(f"Completed patterns: {used_patterns}")
+            return used_patterns
             
+        except Exception as e:
+            self.log_message(f"Error retrieving used patterns: {str(e)}")
+            return used_patterns
+
+
+    def is_pattern_unique(self, pattern: str = None):
+        """
+        Check if a pattern is unique (not used before)
+        
+        Args:
+            new_pattern (str): Pattern to check for uniqueness
+        
+        Returns:
+            bool: True if pattern is unique, False otherwise
+        """
+        used_patterns = self.get_used_patterns()
+        
+        # Normalize pattern for comparison
+        normalized_new_pattern = self._normalize_pattern(pattern)
+        
+        # Check against used patterns
+        for used_pattern in used_patterns:
+            normalized_used_pattern = self._normalize_pattern(used_pattern)
+            if normalized_new_pattern == normalized_used_pattern:
+                return False
+        
+        return True
+
+    def _normalize_pattern(self, pattern):
+        """
+        Normalize pattern for consistent comparison
+        
+        Args:
+            pattern (str): Input pattern
+        
+        Returns:
+            str: Normalized pattern
+        """
+        try:
+            # Convert to lowercase
+            # Remove extra whitespaces
+            # Remove punctuation (optional)
+            import string
+            
+            # Remove punctuation
+            pattern = pattern.translate(str.maketrans('', '', string.punctuation))
+            
+            # Normalize: lowercase and split
+            normalized = ' '.join(pattern.lower().split())
+            
+            return normalized
+        
+        except Exception as e:
+            self.log_message(f"Error normalizing pattern: {str(e)}")
+            return pattern

@@ -57,20 +57,6 @@ class SearchExecutionManager:
             # Get resume point
             resume_point = self.progress_tracker.get_resume_point()
             
-          
-            
-            # Get all used patterns from progress data
-            used_patterns = set()
-            pattern_data = self.progress_tracker.progress_data.get('pattern_data', {})
-            for category_data in pattern_data.values():
-                for subcategory_data in category_data.values():
-                    for pattern_info in subcategory_data.values():
-                        if pattern_info['status'] == 'completed':  # Only add completed patterns
-                            used_patterns.add(pattern_info['pattern'])
-            
-            print(f"Already completed patterns: {used_patterns}")
-                
-            
             # Handle in-progress patterns first
             if resume_point.get('status') == 'resume' and resume_point.get('pending_urls'):
                 return {
@@ -86,8 +72,9 @@ class SearchExecutionManager:
             current_pattern_index = resume_point.get('pattern_index', 0)
             print(f"\nStarting search with pattern index: {current_pattern_index}")
             
-            # Iterate through patterns
+           # Iterate through each insurance category
             for category, subcategories in self.search_patterns.items():
+                # Skip categories until resume point if exists
                 if resume_point.get('category') and category != resume_point['category']:
                     continue
                     
@@ -101,15 +88,20 @@ class SearchExecutionManager:
                         continue
                     
                     for pattern_index, pattern in enumerate(patterns_to_process, start=current_pattern_index):
-                        # Skip if pattern was already used
-                        if pattern in used_patterns:
-                            print(f"Pattern '{pattern}' already used, skipping...")
-                            continue
-                            
-                        # Check if pattern was already completed
-                        if self.progress_tracker.is_pattern_completed(category, subcategory, pattern):
-                            used_patterns.add(pattern)
+
+                        # Get pattern status
+                        pattern_status = self.progress_tracker.get_pattern_status(
+                            category=category,
+                            subcategory=subcategory,
+                            pattern=pattern
+                        )
+                        
+                        used_patterns = self.progress_tracker.get_used_patterns()
+                        # Check if pattern is completed
+                        if pattern_status and pattern_status.get('status') == 'completed':
                             print(f"Pattern '{pattern}' already completed, skipping...")
+                            used_patterns.add(pattern)
+                            print(f"{pattern} added to used patterns")
                             continue
                         
                         print(f"\nProcessing new pattern: {pattern}")
@@ -118,7 +110,6 @@ class SearchExecutionManager:
                         search_success, results = self.search_with_pattern(pattern)
                         
                         if search_success and results:
-                            used_patterns.add(pattern)
                             print(f"Found {len(results)} results for pattern: {pattern}")
                             return {
                                 'category': category,

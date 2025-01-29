@@ -1,19 +1,20 @@
-# search_pattern_generator.py
-
 class SearchPatternGenerator:
     def __init__(self, insurance_data):
         """Initialize with insurance data dictionary"""
         self.insurance_data = insurance_data
         self.patterns = {}
-        self.common_terms = ['insurance', 'coverage', 'policy']
-    
+        self.common_terms = [
+            'insurance', 'coverage', 'policy', 'guide', 'document', 
+            'overview', 'handbook', 'manual'
+        ]
+        
     def clean_term(self, term):
         """Clean and format search terms"""
         if isinstance(term, str):
             # Remove special characters, convert to lowercase
             cleaned = term.lower()
             cleaned = cleaned.replace('_', ' ').replace('-', ' ')
-            return cleaned.strip()
+            return ' '.join(cleaned.split())  # Remove multiple spaces
         return term
 
     def generate_basic_pattern(self, main_category, subcategory_data):
@@ -29,6 +30,11 @@ class SearchPatternGenerator:
         patterns.add(f"{search_term} insurance")
         patterns.add(f"{main_cat} {search_term} insurance")
         
+        # Add document-specific patterns
+        patterns.add(f"{search_term} insurance guide")
+        patterns.add(f"{search_term} coverage document")
+        patterns.add(f"{main_cat} {search_term} handbook")
+        
         return list(patterns)
 
     def generate_description_pattern(self, subcategory_name, subcategory_data):
@@ -41,12 +47,14 @@ class SearchPatternGenerator:
             keyword = self.clean_term(keyword)
             patterns.add(f"{search_term} {keyword}")
             patterns.add(f"{search_term} insurance {keyword}")
+            patterns.add(f"{keyword} {search_term} guide")
             
-            # Combine multiple keywords
+            # Combine multiple keywords more effectively
             for second_keyword in subcategory_data['description_keywords']:
                 if keyword != second_keyword:
                     second_keyword = self.clean_term(second_keyword)
                     patterns.add(f"{search_term} {keyword} {second_keyword}")
+                    patterns.add(f"{search_term} insurance {keyword} {second_keyword}")
         
         return list(patterns)
 
@@ -64,8 +72,15 @@ class SearchPatternGenerator:
             
             # Add variations with common terms
             for common_term in self.common_terms:
-                patterns.add(f"{search_term} {common_term} {keyword}")
-                patterns.add(f"{main_cat} {search_term} {common_term} {keyword}")
+                pattern = f"{search_term} {common_term} {keyword}"
+                if 3 <= len(pattern.split()) <= 6:  # Validate length inline
+                    patterns.add(pattern)
+                    patterns.add(f"{main_cat} {search_term} {common_term} {keyword}")
+        
+        # Add educational patterns
+        patterns.add(f"understanding {search_term} insurance")
+        patterns.add(f"guide to {search_term} coverage")
+        patterns.add(f"what is {search_term} insurance")
         
         return list(patterns)
 
@@ -81,6 +96,11 @@ class SearchPatternGenerator:
             patterns.add(f"{action_word} {search_term} {keyword}")
             patterns.add(f"{search_term} {action_word} {keyword}")
             patterns.add(f"{search_term} insurance {action_word} {keyword}")
+            
+            # Add document-focused patterns
+            patterns.add(f"how {action_word} {search_term} insurance")
+            patterns.add(f"{search_term} coverage {action_word} guide")
+            patterns.add(f"{search_term} insurance {keyword} document")
         
         return list(patterns)
 
@@ -89,13 +109,31 @@ class SearchPatternGenerator:
         cleaned_patterns = set()
         
         for pattern in patterns:
-            # Remove multiple spaces
-            cleaned = ' '.join(pattern.split())
-            # Remove very short or very long patterns
-            if 3 <= len(cleaned.split()) <= 6:
+            # Remove multiple spaces and clean
+            cleaned = ' '.join(self.clean_term(pattern).split())
+            
+            # Validate pattern
+            if self._is_valid_pattern(cleaned):
                 cleaned_patterns.add(cleaned)
         
         return list(cleaned_patterns)
+    
+    def _is_valid_pattern(self, pattern):
+        """Helper method to validate patterns"""
+        words = pattern.split()
+        
+        # Check length
+        if not (3 <= len(words) <= 6):
+            return False
+            
+        # Check for required terms
+        has_insurance_term = any(term in pattern for term in ['insurance', 'coverage', 'policy'])
+        
+        # Avoid duplicate terms
+        if len(set(words)) != len(words):
+            return False
+            
+        return has_insurance_term
 
     def generate_all_patterns(self):
         """Main method to generate all search patterns"""
