@@ -32,15 +32,20 @@ class DocumentNameHandler:
         
         return file_extension
 
-    def generate_unique_name(self, title, original_filename, download_url):
+    def generate_unique_name(self, title, original_filename, download_url, category=None, subcategory=None):
         """
         Generates a unique, clean filename while preserving the correct extension
+        Added optional category/subcategory for better organization
         """
         # Get the correct file extension
         file_extension = self.get_file_info(download_url, original_filename)
         
         # Clean the title
         cleaned_name = self._clean_name(title)
+        
+        # Add category/subcategory prefix if provided
+        if category and subcategory:
+            cleaned_name = f"{category}_{subcategory}_{cleaned_name}"
         
         # Ensure uniqueness
         base_name = cleaned_name

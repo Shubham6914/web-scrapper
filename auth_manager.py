@@ -195,3 +195,30 @@ class AuthManager:
         
         self.config_manager.log_message("All login attempts failed")
         return False
+    
+    def verify_session(self):
+        """
+        Verify if current session is valid
+        Returns:
+            bool: Session validity status
+        """
+        try:
+            if self.check_login_status():
+                self.session_valid = True
+                return True
+            
+            self.session_valid = False
+            return self.ensure_login()
+            
+        except Exception as e:
+            self.config_manager.log_message(f"Error verifying session: {str(e)}")
+            self.session_valid = False
+            return False
+
+def is_session_valid(self):
+        """
+        Check if current session is valid
+        Returns:
+            bool: Session validity status
+        """
+        return self.session_valid
