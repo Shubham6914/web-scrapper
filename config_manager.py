@@ -28,33 +28,48 @@ class ConfigManager:
         # Base Directory Setup
         self.app_dir = os.path.dirname(os.path.abspath(__file__))
         self.user_data_dir = os.path.join(self.app_dir, 'chrome-user-data')
-        self.insurance_files_dir = os.path.join(self.app_dir, 'Insurance_files')
+        self.insurance_files_dir = os.path.join(self.app_dir, 'INSURANCE_FILES')
         self.log_dir = os.path.join(self.app_dir, 'logs')
         self.config_file = os.path.join(self.app_dir, 'config.json')
         
-        # Create base directories
-        self.create_base_directories()
+        # Create base directories silently first
+        self._create_base_directories_silent()
         
-        # Initialize config
-        self.config = self.load_config()
-        
-        # Setup logging
+        # Initialize log file path after directories are created
         self.log_file = os.path.join(
             self.log_dir, 
             f'session_log_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.txt'
         )
         
+        # Initialize config
+        self.config = self.load_config()
+        
         # Track current category and subcategory
         self.current_category = None
         self.current_subcategory = None
         self.current_download_dir = None
+        
+        # Log initialization
+        self.log_message("ConfigManager initialized successfully")
 
-    def create_base_directories(self):
-        """Create base directories if they don't exist"""
+    def _create_base_directories_silent(self):
+        """Create base directories without logging"""
         for directory in [self.user_data_dir, self.insurance_files_dir, self.log_dir]:
             if not os.path.exists(directory):
                 os.makedirs(directory)
-                self.log_message(f"Created directory: {directory}")
+
+    def log_message(self, message):
+        """Log a message with timestamp"""
+        try:
+            timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            log_entry = f'[{timestamp}] {message}\n'
+            
+            with open(self.log_file, 'a') as f:
+                f.write(log_entry)
+            print(log_entry.strip())  # Also print to console
+        except Exception as e:
+            print(f"Error writing to log: {str(e)}")
+            print(f"Message was: {message}")
 
     def setup_category_directory(self, category):
         """
@@ -104,7 +119,9 @@ class ConfigManager:
             'current_category': None,
             'current_subcategory': None,
             'completed_categories': [],
-            'completed_subcategories': {}
+            'completed_subcategories': {},
+            'lastPage': 1,
+            'lastIndex': 0
         }
         
         if os.path.exists(self.config_file):
@@ -153,12 +170,6 @@ class ConfigManager:
         
         return chrome_options
 
-    def log_message(self, message):
-        """Log a message with timestamp"""
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        with open(self.log_file, 'a') as f:
-            f.write(f'[{timestamp}] {message}\n')
-
     def update_category_progress(self, category, subcategory):
         """Update category and subcategory progress"""
         self.config['current_category'] = category
@@ -179,7 +190,19 @@ class ConfigManager:
         if category not in self.config['completed_categories']:
             self.config['completed_categories'].append(category)
             self.save_config()
+            
+    def update_config(self, page, index):
+        """Update and save configuration"""
+        self.config['lastPage'] = page
+        self.config['lastIndex'] = index
+        self.save_config()
 
+    def reset_index(self):
+        """Reset index in configuration"""
+        self.config['lastIndex'] = 0
+        self.save_config()
+        
+        
     def get_directory_structure(self):
         """Return current directory structure"""
         return {
@@ -189,5 +212,5 @@ class ConfigManager:
             'log_dir': self.log_dir,
             'current_category': self.current_category,
             'current_subcategory': self.current_subcategory,
-            'current_download_dir': self.current_download_dir
+            'current_download_dir': self.current_download_dir 
         }

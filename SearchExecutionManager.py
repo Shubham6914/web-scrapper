@@ -4,11 +4,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 import time
 
-from progress_tracker import ProgressTracker
-from processed_url_manager import ProcessedURLManager  # New import
+from ProgressTracker import ProgressTracker
+from ProcessedURLManager import ProcessedURLManager  # New import
 
 class SearchExecutionManager:
-    def __init__(self, driver, progress_tracker=None, url_manager=None):
+    def __init__(self, driver,config_manager, progress_tracker=None, url_manager=None,):
         """
         Initialize Search Execution Manager
         Args:
@@ -17,27 +17,67 @@ class SearchExecutionManager:
             url_manager: ProcessedURLManager instance
         """
         self.driver = driver
+        self.config_manager = config_manager
         self.progress_tracker = progress_tracker if progress_tracker else ProgressTracker()
         self.url_manager = url_manager if url_manager else ProcessedURLManager()
         
         self.search_config = {
             'wait_time': 10,
             'min_results': 2,
-            'max_results': 5
+            'max_results': 5,
+            'search_delay': 3
         }
 
-    def execute_search(self, category, subcategory):
+    def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
         """
-        Execute search for given category and subcategory
+        Execute search with retries
         Args:
             category: Current category
             subcategory: Current subcategory
+            search_term: Term to search
+            max_attempts: Maximum number of retry attempts
+        Returns:
+            tuple: (success_status, urls_list)
+        """
+        self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
+        
+        for attempt in range(max_attempts):
+            try:
+                self.config_manager.log_message(f"Attempt {attempt + 1} of {max_attempts}")
+                
+                success, urls = self.execute_single_search(category, subcategory, search_term)
+                
+                if success and urls:
+                    self.config_manager.log_message(f"Successfully found URLs on attempt {attempt + 1}")
+                    return True, urls
+                
+                # If not successful and not last attempt, wait before retry
+                if attempt < max_attempts - 1:
+                    self.config_manager.log_message(f"No URLs found, waiting before retry...")
+                    time.sleep(5)  # Wait between attempts
+                
+            except Exception as e:
+                self.config_manager.log_message(f"Error in search attempt {attempt + 1}: {str(e)}")
+                if attempt < max_attempts - 1:
+                    time.sleep(5)  # Wait before retry
+        
+        self.config_manager.log_message(f"No URLs found after {max_attempts} attempts")
+        return False, []
+
+    def execute_single_search(self, category, subcategory, search_term):
+        """
+        Execute single search attempt
+        Args:
+            category: Current category
+            subcategory: Current subcategory
+            search_term: Term to search
         Returns:
             tuple: (success_status, urls_list)
         """
         try:
-            print(f"\nSearching for: {category} - {subcategory}")
-            search_term = f"{subcategory} {category}"
+            self.config_manager.log_message(f"Executing search with term: {search_term}")
+            print(f"\nSearching for: {search_term}")
+            print(f"Category: {category}, Subcategory: {subcategory}")
             
             # Navigate to search page
             self.driver.get('https://www.scribd.com/search')
@@ -53,37 +93,36 @@ class SearchExecutionManager:
             search_input.send_keys(Keys.RETURN)
             
             # Wait for results
-            time.sleep(3)
+            time.sleep(self.search_config['search_delay'])
             
             # Get and filter URLs
             urls = self.collect_document_urls(category, subcategory)
             
             if urls:
-                print(f"Found {len(urls)} new documents for {subcategory}")
+                self.config_manager.log_message(f"Found {len(urls)} URLs: {urls}")
+                print(f"Found {len(urls)} new documents")
                 self.progress_tracker.update_search_progress(
                     category=category,
                     subcategory=subcategory,
-                    success=True,
-                    documents=len(urls)
+                    success=True
                 )
                 return True, urls
             
-            print(f"No new results found for {subcategory}")
+            self.config_manager.log_message("No URLs found in search results")
+            print("No new results found")
+            self.progress_tracker.update_search_progress(
+                category=category,
+                subcategory=subcategory,
+                success=False
+            )
             return False, []
             
         except Exception as e:
-            print(f"Error executing search: {str(e)}")
+            self.config_manager.log_message(f"Error executing search: {str(e)}")
             return False, []
-
+            
     def collect_document_urls(self, category, subcategory):
-        """
-        Collect and filter document URLs
-        Args:
-            category: Current category
-            subcategory: Current subcategory
-        Returns:
-            list: List of new document URLs
-        """
+        """Collect and filter document URLs"""
         try:
             elements = self.driver.find_elements(
                 By.CSS_SELECTOR, 'a[class^="FluidCell-module_linkOverlay"]'
@@ -95,7 +134,7 @@ class SearchExecutionManager:
                     url = element.get_attribute('href')
                     if (url and 
                         'www.scribd.com/document/' in url and 
-                        not self.url_manager.is_processed(url)):  # Check if URL is new
+                        not self.url_manager.is_processed(url)):
                         new_urls.append(url)
                         
                         if len(new_urls) >= self.search_config['max_results']:

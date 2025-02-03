@@ -33,10 +33,34 @@ class SearchMechanism:
         return {
             'category': current_category,
             'subcategory': current_subcategory,
-            'search_term': f"{current_subcategory} {current_category}",
+            'search_term': self._format_search_term(current_subcategory),
             'is_last_subcategory': self.is_last_subcategory(),
             'is_last_category': self.is_last_category()
         }
+    
+    def _format_search_term(self, term):
+        """
+        Format subcategory for search
+        Args:
+            term: Subcategory name
+        Returns:
+            str: Formatted search term
+        """
+        # Remove underscores and clean up
+        term = term.replace('_', ' ')
+        term = ' '.join(term.split())
+        
+        # Add 'insurance' if not present
+        if 'insurance' not in term.lower():
+            term += ' insurance'
+            
+        # Remove category prefix if present
+        for category in self.category_list:
+            category_name = category.replace('_', ' ').lower()
+            if term.lower().startswith(category_name):
+                term = term[len(category_name):].strip()
+        
+        return term.strip()
     
     def move_to_next(self):
         """
@@ -81,8 +105,11 @@ class SearchMechanism:
         processed_subcategories = sum(len(self.categories[cat]) for cat in self.category_list[:self.current_category_index])
         processed_subcategories += self.current_subcategory_index
         
+        current_item = self.get_current_search_item()
+        
         return {
-            'current_position': self.get_current_search_item(),
+            'current_position': current_item,
+            'current_search_term': current_item['search_term'] if current_item else None,
             'processed_categories': processed_categories,
             'total_categories': total_categories,
             'processed_subcategories': processed_subcategories,
@@ -109,3 +136,17 @@ class SearchMechanism:
                 return self.get_current_search_item()
         
         return None
+
+    # def get_current_terms(self):
+    #     """
+    #     Get current search terms and variations
+    #     Returns:
+    #         list: List of search term variations
+    #     """
+    #     current_item = self.get_current_search_item()
+    #     if not current_item:
+    #         return []
+            
+    #     base_term = current_item['search_term']
+    #     return f"{base_term} insurance"
+    

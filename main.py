@@ -18,6 +18,9 @@ from insurance_data import INSURANCE_CATEGORIES
 from file_count_tracker import DownloadTracker
 from file_naming_convention import DocumentNameHandler
 from category_processor import CategoryProcessor
+from ProcessedURLManager import ProcessedURLManager
+from report import DownloadReportManager
+
 
 class ScribdScraper:
     def __init__(self):
@@ -26,11 +29,16 @@ class ScribdScraper:
             # Initialize config manager first
             self.config_manager = ConfigManager()
             
-            # Initialize tracking components
+            # Initialize progress tracker first (since other components depend on it)
+            self.progress_tracker = ProgressTracker()
+            
+            # Initialize tracking and management components
             self.download_tracker = DownloadTracker(log_file=self.config_manager.log_file)
             self.name_handler = DocumentNameHandler(self.config_manager.log_file)
-            self.progress_tracker = ProgressTracker()
-            self.url_manager = ProcessedURLManager(log_file=self.config_manager.log_file)
+            self.url_manager = ProcessedURLManager(
+                log_file=self.config_manager.log_file
+            )
+            self.report_manager = DownloadReportManager()
             
             # Setup WebDriver
             self.driver = self.setup_driver()
@@ -43,19 +51,27 @@ class ScribdScraper:
                 self.download_tracker,
                 self.name_handler,
                 self.progress_tracker,
-                self.url_manager
+                self.url_manager,
+                self.report_manager
             )
             
             # Initialize search components
             self.search_mechanism = SearchMechanism(INSURANCE_CATEGORIES)
             self.search_executor = SearchExecutionManager(
-                self.driver,
-                self.progress_tracker,
-                self.url_manager
+                driver=self.driver,
+                progress_tracker=self.progress_tracker,  # Explicitly name the parameter
+                config_manager = self.config_manager,
+                url_manager=self.url_manager
             )
 
+            # Log successful initialization
+            self.config_manager.log_message("All components initialized successfully")
+
         except Exception as e:
-            print(f"Error initializing ScribdScraper: {str(e)}")
+            error_msg = f"Error initializing ScribdScraper: {str(e)}"
+            if hasattr(self, 'config_manager'):
+                self.config_manager.log_message(error_msg)
+            print(error_msg)
             raise
 
     def setup_driver(self):
@@ -78,8 +94,8 @@ class ScribdScraper:
             self.driver.get('https://www.scribd.com')
             self.config_manager.log_message("Started browser session")
 
-            # Perform login and verify session
-            if not self.auth_manager.verify_session():
+            # Perform login
+            if not self.auth_manager.ensure_login():
                 self.config_manager.log_message("Failed to login, stopping execution")
                 return
 
@@ -90,30 +106,41 @@ class ScribdScraper:
                 try:
                     category = current_search['category']
                     subcategory = current_search['subcategory']
+                    search_term = current_search['search_term']
                     
                     self.config_manager.log_message(f"\n=== Processing: {category} - {subcategory} ===")
+                    self.config_manager.log_message(f"Search term: {search_term}")
                     
                     # Setup directories for current category/subcategory
                     self.config_manager.setup_category_directory(category)
                     current_dir = self.config_manager.setup_subcategory_directory(category, subcategory)
                     
-                    # Execute search
-                    search_success, urls = self.search_executor.execute_search(
+                    # # Try different search variations
+                    # search_terms = self.search_mechanism.get_current_terms()
+                    success = False
+                    urls = []
+                    
+                   
+                    search_success, found_urls = self.search_executor.execute_search_with_retries(
                         category,
-                        subcategory
+                        subcategory,
+                        search_term
                     )
                     
-                    if search_success and urls:
-                        self.config_manager.log_message(f"Found {len(urls)} new documents")
-                        
+                    if search_success and found_urls:
+                        self.config_manager.log_message(f"Found {len(found_urls)} URLs to process")
                         # Process downloads
                         downloaded_count = 0
-                        for url in urls:
+                        for url in found_urls:
+                            print(f"Processing URL: {url}")
                             try:
-                                # Skip if URL already processed
+                                # Check if URL is already processed
                                 if self.url_manager.is_processed(url):
+                                    self.config_manager.log_message(f"Skipping processed URL: {url}")
                                     continue
-                                    
+                                
+                                # Attempt to download
+                                self.config_manager.log_message(f"Attempting to download: {url}")
                                 success = self.download_manager.download_document(
                                     url,
                                     category,
@@ -121,42 +148,29 @@ class ScribdScraper:
                                 )
                                 
                                 if success:
+                                    self.config_manager.log_message("Download successful")
                                     downloaded_count += 1
-                                    self.config_manager.log_message(
-                                        f"Successfully downloaded {downloaded_count} documents"
-                                    )
-                                    
-                                    # Check if we've reached desired download count
-                                    if downloaded_count >= 2:  # Adjust number as needed
+                                    # Update URL tracking
+                                    self.url_manager.add_url(category, subcategory, url)
+                                    if downloaded_count >= 2:  # Desired download count reached
                                         break
-                                        
+                                else:
+                                    self.config_manager.log_message("Download failed")   
+                                         
                                 time.sleep(2)  # Delay between downloads
                                 
                             except Exception as e:
                                 self.config_manager.log_message(f"Error downloading document: {str(e)}")
                                 continue
                         
-                        # Update progress
+                        # Update progress if any downloads were successful
                         if downloaded_count > 0:
                             self.progress_tracker.mark_subcategory_complete(category, subcategory)
-                            
-                        # Print interim statistics
-                        self.print_interim_stats(category, subcategory)
-                        
-                    else:
-                        self.config_manager.log_message("No new results found")
-                        self.progress_tracker.update_search_progress(
-                            category,
-                            subcategory,
-                            False
-                        )
+                            self.config_manager.log_message(f"Successfully downloaded {downloaded_count} documents")
+                        else:
+                            self.config_manager.log_message("No documents were downloaded for this subcategory")
                     
-                    # Verify session before continuing
-                    if not self.auth_manager.is_session_valid():
-                        if not self.auth_manager.verify_session():
-                            raise Exception("Lost session, unable to reconnect")
-                    
-                    # Move to next subcategory
+                    # Move to next search item
                     current_search = self.search_mechanism.move_to_next()
                     
                     if current_search and current_search.get('is_last_subcategory'):

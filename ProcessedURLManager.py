@@ -2,6 +2,8 @@ import os
 from typing import List, Dict, Set
 from datetime import datetime
 
+
+
 class ProcessedURLManager:
     def __init__(self, log_file: str = None):
         """
@@ -14,7 +16,8 @@ class ProcessedURLManager:
         self.processed_urls: Set[str] = set()
         self.category_urls: Dict[str, Dict[str, Set[str]]] = {}
         self.load_processed_urls()
-
+        
+    
     def load_processed_urls(self) -> None:
         """Load existing processed URLs from file"""
         try:
