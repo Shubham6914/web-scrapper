@@ -172,7 +172,7 @@ cython_debug/
 
 # Folders to ignore
 chrome-user-data
-files
+INSURANCE_FILES
 logs
 myvenv
 
