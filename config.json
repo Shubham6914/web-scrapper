@@ -2,7 +2,8 @@
     "current_category": null,
     "current_subcategory": null,
     "completed_categories": [
-        "HEALTH_INSURANCE"
+        "HEALTH_INSURANCE",
+        "AUTO_INSURANCE"
     ],
     "completed_subcategories": {},
     "lastPage": 1,

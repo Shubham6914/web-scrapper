@@ -43,8 +43,11 @@ class ScribdScraper:
             self.url_manager = ProcessedURLManager(
                 log_file=self.config_manager.log_file
             )
-            self.report_manager = DownloadReportManager()
-            
+            self.report_manager = DownloadReportManager(
+            excel_file='download_reports.xlsx',
+            spreadsheet_id='1sbKp5Xa_NPd5Bp6MbaS_eaLlgLzsdX_t3jcms3zgXQ4'
+            )
+                    
             # Setup WebDriver
             self.driver = self.setup_driver()
             

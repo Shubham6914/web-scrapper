@@ -116,9 +116,22 @@ class DownloadManager:
             
             # Verify download and rename file
             if self.verify_and_rename_file(cleaned_title, download_url, category, subcategory):
+                # Get file size
+                current_dir = self.config_manager.get_current_download_dir()
+                file_path = os.path.join(current_dir, cleaned_title)
+                file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                
                 # Add URL to processed list
                 self.url_manager.add_url(category, subcategory, url)
                 
+                # Record in report manager
+                self.report_manager.add_download_record(
+                    filename=cleaned_title,
+                    category=category,
+                    subcategory=subcategory,
+                    url=url,
+                    file_size=file_size
+                )
                 # Update progress tracker with verified count
                 self.progress_tracker.record_download(
                     category=category,
@@ -215,6 +228,7 @@ class DownloadManager:
             # Get download URL and original filename
             download_url = modal_download_button.get_attribute('href')
             original_filename = os.path.basename(download_url.split('?')[0])
+            self.config_manager.log_message(f" 1st Original filename: {original_filename}")
             
             # Clean up URL and filename
             if download_url.endswith('#'):

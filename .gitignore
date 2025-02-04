@@ -175,7 +175,7 @@ chrome-user-data
 INSURANCE_FILES
 logs
 myvenv
-
+credentials.json
 # Files to ignore
 download_reports.xlsx
 *.pyc
