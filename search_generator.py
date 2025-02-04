@@ -11,11 +11,21 @@ class SearchMechanism:
         self.current_subcategory_index = 0
         self.search_completed = False
         
-    def initialize_search(self):
-        """Initialize or reset search position"""
-        self.current_category_index = 0
-        self.current_subcategory_index = 0
-        self.search_completed = False
+    def initialize_search(self, resume_point=None):
+        """
+        Initialize or reset search position with resume capability
+        Args:
+            resume_point: Dictionary containing resume information
+        """
+        if resume_point:
+            self.current_category_index = resume_point['category_index']
+            self.current_subcategory_index = resume_point['subcategory_index']
+            self.search_completed = False
+        else:
+            self.current_category_index = 0
+            self.current_subcategory_index = 0
+            self.search_completed = False
+            
         return self.get_current_search_item()
     
     def get_current_search_item(self):
@@ -35,8 +45,11 @@ class SearchMechanism:
             'subcategory': current_subcategory,
             'search_term': self._format_search_term(current_subcategory),
             'is_last_subcategory': self.is_last_subcategory(),
-            'is_last_category': self.is_last_category()
+            'is_last_category': self.is_last_category(),
+            'category_index': self.current_category_index,
+            'subcategory_index': self.current_subcategory_index
         }
+    
     
     def _format_search_term(self, term):
         """

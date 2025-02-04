@@ -16,37 +16,77 @@ from selenium.webdriver.chrome.options import Options
 import os
 import time
 import traceback
+import datetime
+
 
 class DownloadManager:
-    def __init__(self, driver, config_manager, download_tracker, name_handler, progress_tracker, url_manager, report_manager):
+    def __init__(self, driver, config_manager, name_handler, progress_tracker, url_manager, report_manager):
         self.driver = driver
         self.config_manager = config_manager
-        self.download_tracker = download_tracker
         self.name_handler = name_handler
         self.progress_tracker = progress_tracker
         self.url_manager = url_manager
         self.report_manager = report_manager
         self.wait = WebDriverWait(self.driver, 10)
 
+    
     def download_document(self, url, category, subcategory):
         """Main method to handle document download process"""
         try:
-            self.config_manager.log_message(f"\nStarting download for: {url}")
+            self.config_manager.log_message(f"\n=== Starting Download Process ===")
+            self.config_manager.log_message(f"URL: {url}")
+            self.config_manager.log_message(f"Category: {category}")
+            self.config_manager.log_message(f"Subcategory: {subcategory}")
             
-            # Set Chrome preferences for download directory
+            # Check if already downloaded
+            if self.url_manager.is_processed(url):
+                self.config_manager.log_message("URL already processed, skipping")
+                return False
+            
+            # Get current download directory
             current_dir = self.config_manager.get_current_download_dir()
-            chrome_options = Options()
-            prefs = {
-                "download.default_directory": current_dir,
-                "download.prompt_for_download": False,
-                "download.directory_upgrade": True,
-                "safebrowsing.enabled": True,
-                "plugins.always_open_pdf_externally": True
-            }
-            chrome_options.add_experimental_option("prefs", prefs)
+            self.config_manager.log_message(f"Download directory: {current_dir}")
             
-            # Update driver preferences
-            self.driver.execute_script("Object.defineProperty(navigator, 'plugins', {get: function() {return[1, 2, 3, 4, 5];},});")
+            # Set Chrome preferences for download directory using multiple methods
+            try:
+                # Method 1: Using Chrome options
+                if hasattr(self.driver, 'options'):
+                    prefs = {
+                        "download.default_directory": current_dir,
+                        "download.prompt_for_download": False,
+                        "download.directory_upgrade": True,
+                        "safebrowsing.enabled": True,
+                        "plugins.always_open_pdf_externally": True
+                    }
+                    self.driver.options.add_experimental_option("prefs", prefs)
+                
+                # Method 2: Using JavaScript
+                js_script = f"""
+                    const prefs = {{
+                        "download.default_directory": "{current_dir}",
+                        "download.prompt_for_download": false,
+                        "download.directory_upgrade": true,
+                        "safebrowsing.enabled": true,
+                        "plugins.always_open_pdf_externally": true
+                    }};
+                    Object.keys(prefs).forEach(key => {{
+                        if (chrome.preferences) {{
+                            chrome.preferences.setPref(key, prefs[key]);
+                        }}
+                    }});
+                """
+                self.driver.execute_script(js_script)
+                
+                # Method 3: Using CDP command if available
+                if hasattr(self.driver, 'execute_cdp_cmd'):
+                    self.driver.execute_cdp_cmd('Page.setDownloadBehavior', {
+                        'behavior': 'allow',
+                        'downloadPath': current_dir
+                    })
+                
+                self.config_manager.log_message("Download preferences updated")
+            except Exception as e:
+                self.config_manager.log_message(f"Warning: Could not set download preferences: {str(e)}")
             
             # Navigate to document page
             self.driver.get(url)
@@ -55,6 +95,7 @@ class DownloadManager:
             # Get document title
             document_title = self.get_document_title()
             if not document_title:
+                self.config_manager.log_message("Failed to get document title")
                 return False
             
             # Handle download button
@@ -70,13 +111,49 @@ class DownloadManager:
                 self.config_manager.log_message("Failed to handle download modal")
                 return False
             
-            # Verify download
-            return self.verify_and_rename_file(cleaned_title, download_url, category, subcategory)
+            # Additional wait for download preferences to take effect
+            self.driver.implicitly_wait(2)
+            
+            # Verify download and rename file
+            if self.verify_and_rename_file(cleaned_title, download_url, category, subcategory):
+                # Add URL to processed list
+                self.url_manager.add_url(category, subcategory, url)
+                
+                # Update progress tracker with verified count
+                self.progress_tracker.record_download(
+                    category=category,
+                    subcategory=subcategory,
+                    count=1  # Record single download
+                )
+                
+                current_downloads = self.progress_tracker.get_subcategory_downloads(category, subcategory)
+                self.config_manager.log_message(f"Current downloads for {subcategory}: {current_downloads}")
+                
+                # Check if we've reached 2 downloads
+                if current_downloads >= 2:
+                    self.config_manager.log_message(f"Subcategory {subcategory} has reached required downloads")
+                    self.progress_tracker.mark_subcategory_complete(category, subcategory)
+                    
+                    # Check if category is complete
+                    if self.progress_tracker.is_category_complete(category):
+                        self.config_manager.log_message(f"Category {category} completed")
+                        self.config_manager.mark_category_complete(category)
+                
+                self.config_manager.log_message("Download process completed successfully")
+                return True
+            
+            self.config_manager.log_message("Download verification failed")
+            return False
                 
         except Exception as e:
             self.config_manager.log_message(f"Error in download process: {str(e)}")
             self.config_manager.log_message(traceback.format_exc())
             return False
+        finally:
+            # Log download attempt regardless of outcome
+            self.config_manager.log_message("=== Download Process Ended ===\n")
+            
+            
     def get_document_title(self):
         """Extract and clean document title"""
         try:
@@ -133,56 +210,34 @@ class DownloadManager:
             )
 
             if not modal_download_button:
-                self.config_manager.log_message("Download button not found")
                 return None, None
 
-            # Get download URL and clean it
+            # Get download URL and original filename
             download_url = modal_download_button.get_attribute('href')
+            original_filename = os.path.basename(download_url.split('?')[0])
+            
+            # Clean up URL and filename
             if download_url.endswith('#'):
                 download_url = download_url[:-1]
-                
-            original_filename = os.path.basename(download_url.split('?')[0])
             if original_filename.endswith('#'):
                 original_filename = original_filename[:-1]
                 
-            # Ensure .pdf extension
+            # Preserve original filename structure but ensure .pdf extension
             if not original_filename.lower().endswith('.pdf'):
                 original_filename += '.pdf'
-                
+            
             self.config_manager.log_message(f"Download URL: {download_url}")
             self.config_manager.log_message(f"Original filename: {original_filename}")
             
-            # Generate clean filename
-            document_title = document_title.strip() if document_title else original_filename
-            cleaned_title = f"{document_title}.pdf"
+            # Use original filename structure
+            cleaned_title = original_filename
             
-            # Create a temporary download link with correct attributes
+            # Set download attributes
             self.driver.execute_script("""
                 var link = arguments[0];
                 var fileName = arguments[1];
-                
-                // Set download attributes
                 link.setAttribute('download', fileName);
                 link.setAttribute('target', '_blank');
-                
-                // Force download behavior
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    var xhr = new XMLHttpRequest();
-                    xhr.open('GET', this.href, true);
-                    xhr.responseType = 'blob';
-                    xhr.onload = function() {
-                        var blob = xhr.response;
-                        var a = document.createElement('a');
-                        a.href = window.URL.createObjectURL(blob);
-                        a.download = fileName;
-                        a.style.display = 'none';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                    };
-                    xhr.send();
-                });
             """, modal_download_button, cleaned_title)
 
             # Click download button
@@ -195,67 +250,134 @@ class DownloadManager:
             self.config_manager.log_message(f"Error in download modal: {str(e)}")
             self.config_manager.log_message(traceback.format_exc())
             return None, None
+        
+    
     def verify_and_rename_file(self, cleaned_title, download_url, category, subcategory):
         """Verify download and rename file"""
         try:
-            time.sleep(15)  # Wait for download
+            # Define valid extensions
+            valid_extensions =  {'.pdf', '.doc', '.docx', '.txt', '.ppt', '.pptx', '.xlsx', '.xls'}
             
-            # Get both directories
+            # Initial wait for download
+            time.sleep(5)
+            
+            # Get directories but prioritize correct directory
             current_dir = self.config_manager.get_current_download_dir()
             base_dir = self.config_manager.insurance_files_dir
             
-            self.config_manager.log_message(f"Checking directories:")
-            self.config_manager.log_message(f"Current dir: {current_dir}")
-            self.config_manager.log_message(f"Base dir: {base_dir}")
+            self.config_manager.log_message(f"\n=== Starting File Verification ===")
+            self.config_manager.log_message(f"Looking for file: {cleaned_title}")
+            self.config_manager.log_message(f"Target directory: {current_dir}")
             
-            # Check both directories for the file
-            directories_to_check = [current_dir, base_dir]
+            # Extract document ID and expected extension
+            doc_id = download_url.split('/')[-2]
+            expected_ext = os.path.splitext(cleaned_title)[1].lower()
+            
+            # Wait for file with timeout
+            max_attempts = 3
             found_file = None
             source_dir = None
             
-            for directory in directories_to_check:
-                self.config_manager.log_message(f"Checking directory: {directory}")
+            for attempt in range(max_attempts):
+                self.config_manager.log_message(f"\nAttempt {attempt + 1} of {max_attempts}")
                 
-                if not os.path.exists(directory):
-                    continue
+                # Check directories in priority order
+                directories_to_check = [
+                    (current_dir, "Target Directory"),
+                    (base_dir, "Base Directory"),
+                ]
+                
+                for directory, dir_type in directories_to_check:
+                    if not os.path.exists(directory):
+                        continue
                     
-                files = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
-                self.config_manager.log_message(f"Files in {directory}: {files}")
-                
-                # Look for both the original name and cleaned title
-                for file in files:
-                    if file.endswith('.pdf') and (
-                        file.startswith(cleaned_title.replace('.pdf', '')) or
-                        'Medical-Insurance' in file
-                    ):
-                        found_file = file
-                        source_dir = directory
+                    self.config_manager.log_message(f"Checking {dir_type}: {directory}")
+                    
+                    # Get all valid files in directory
+                    files = [
+                        f for f in os.listdir(directory) 
+                        if os.path.isfile(os.path.join(directory, f)) 
+                        and os.path.splitext(f)[1].lower() in valid_extensions
+                    ]
+                    
+                    if files:
+                        self.config_manager.log_message(f"Found files: {files}")
+                        
+                        for file in files:
+                            file_lower = file.lower()
+                            file_ext = os.path.splitext(file_lower)[1]
+                            
+                            # Try different matching strategies
+                            is_match = False
+                            match_reason = ""
+                            
+                            # 1. Exact match
+                            if file == cleaned_title:
+                                is_match = True
+                                match_reason = "exact match"
+                                
+                            # 2. Document ID match
+                            elif doc_id in file:
+                                is_match = True
+                                match_reason = "document ID match"
+                                
+                            # 3. Name content match
+                            elif all(word.lower() in file_lower for word in cleaned_title.lower().split('-')):
+                                is_match = True
+                                match_reason = "content match"
+                            
+                            if is_match:
+                                found_file = file
+                                source_dir = directory
+                                self.config_manager.log_message(f"Found file: {file} ({match_reason})")
+                                break
+                        
+                        if found_file:
+                            break
+                    
+                    if found_file:
                         break
                         
                 if found_file:
                     break
+                    
+                self.config_manager.log_message("No file found, waiting 5 seconds...")
+                time.sleep(5)
             
             if not found_file:
-                self.config_manager.log_message("No matching file found in any directory")
+                self.config_manager.log_message("No matching file found after all attempts")
                 return False
-                
-            self.config_manager.log_message(f"Found file: {found_file} in {source_dir}")
             
-            # Move file to correct directory if needed
+            self.config_manager.log_message(f"\n=== Moving File ===")
+            self.config_manager.log_message(f"Found file: {found_file}")
+            self.config_manager.log_message(f"Source: {source_dir}")
+            self.config_manager.log_message(f"Target: {current_dir}")
+            
+            # Ensure target directory exists
+            os.makedirs(current_dir, exist_ok=True)
+            
+            # Setup paths
             old_path = os.path.join(source_dir, found_file)
             new_path = os.path.join(current_dir, cleaned_title)
             
-            if old_path != new_path:
-                # Ensure target directory exists
-                os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                
-                # Move and rename file
+            # Preserve original extension if different
+            if os.path.splitext(found_file)[1].lower() != os.path.splitext(cleaned_title)[1].lower():
+                new_path = os.path.join(current_dir, 
+                                    os.path.splitext(cleaned_title)[0] + 
+                                    os.path.splitext(found_file)[1])
+                cleaned_title = os.path.basename(new_path)
+            
+            # Handle file already exists
+            if os.path.exists(new_path):
+                base, ext = os.path.splitext(cleaned_title)
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                cleaned_title = f"{base}_{timestamp}{ext}"
+                new_path = os.path.join(current_dir, cleaned_title)
+            
+            # Move file
+            try:
                 os.rename(old_path, new_path)
-                self.config_manager.log_message(f"File moved and renamed to: {cleaned_title}")
-                
-                # Update tracking
-                self.download_tracker.record_download(category, subcategory)
-                
+                self.config_manager.log_message(f"Successfully moved file to: {new_path}")
                 # Update report
                 try:
                     file_size = os.path.getsize(new_path)
@@ -269,8 +391,10 @@ class DownloadManager:
                     self.config_manager.log_message(f"Error updating report: {str(e)}")
                 
                 return True
-            
-            return True
+                
+            except Exception as e:
+                self.config_manager.log_message(f"Error moving file: {str(e)}")
+                return False
                 
         except Exception as e:
             self.config_manager.log_message(f"Error in file verification: {str(e)}")

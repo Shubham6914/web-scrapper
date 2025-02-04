@@ -54,28 +54,41 @@ class ProcessedURLManager:
             bool: Success status
         """
         try:
-            if url not in self.processed_urls:
-                # Add to memory
-                self.processed_urls.add(url)
+            # Check if URL is already processed
+            if url in self.processed_urls:
+                self.log_message(f"URL already processed: {url}")
+                return False
                 
-                # Add to category tracking
-                if category not in self.category_urls:
-                    self.category_urls[category] = {}
-                if subcategory not in self.category_urls[category]:
-                    self.category_urls[category][subcategory] = set()
-                self.category_urls[category][subcategory].add(url)
-                
-                # Write to file
+            # Add to memory
+            self.processed_urls.add(url)
+            
+            # Add to category tracking
+            if category not in self.category_urls:
+                self.category_urls[category] = {}
+            if subcategory not in self.category_urls[category]:
+                self.category_urls[category][subcategory] = set()
+            
+            # Add URL to category tracking
+            self.category_urls[category][subcategory].add(url)
+            
+            # Write to file atomically
+            try:
                 with open(self.processed_urls_file, 'a') as f:
                     f.write(f"{category}|{subcategory}|{url}\n")
-                
-                self.log_message(f"Added new URL: {url}")
-                self.log_message(f"Category: {category}, Subcategory: {subcategory}")
-                return True
+            except Exception as e:
+                # Rollback memory changes if file write fails
+                self.processed_urls.remove(url)
+                self.category_urls[category][subcategory].remove(url)
+                self.log_message(f"Error writing to file: {str(e)}")
+                return False
+            
+            self.log_message(f"Added new URL: {url}")
+            self.log_message(f"Category: {category}, Subcategory: {subcategory}")
+            return True
                 
         except Exception as e:
             self.log_message(f"Error adding URL: {str(e)}")
-        return False
+            return False
 
     def is_processed(self, url: str) -> bool:
         """
@@ -140,6 +153,8 @@ class ProcessedURLManager:
             except Exception as e:
                 print(f"Error writing to log: {str(e)}")
         print(message)
+
+
 
     def cleanup(self) -> None:
         """Perform any necessary cleanup"""

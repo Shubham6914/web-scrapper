@@ -157,19 +157,82 @@ class ConfigManager:
         chrome_options.add_argument('--remote-allow-origins=*')
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument('--disable-software-rasterizer')
-
-        # Download preferences - using current subcategory directory
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+        
+        # Download preferences
+        download_dir = self.current_download_dir or self.insurance_files_dir
         chrome_prefs = {
-            "download.default_directory": self.current_download_dir or self.insurance_files_dir,
+            "download.default_directory": download_dir,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
             "safebrowsing.enabled": True,
-            "plugins.always_open_pdf_externally": True
+            "plugins.always_open_pdf_externally": True,
+            "download.open_pdf_in_system_reader": False,
+            "profile.default_content_settings.popups": 0,
+            "profile.default_content_setting_values.automatic_downloads": 1,
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False
         }
         chrome_options.add_experimental_option("prefs", chrome_prefs)
         
+        # Remove automation flags and logging
+        chrome_options.add_experimental_option('excludeSwitches', [
+            'enable-automation',
+            'enable-logging'
+        ])
+        
         return chrome_options
 
+    
+    def update_download_preferences(self, driver):
+        """Update Chrome download preferences during runtime"""
+        try:
+            current_dir = self.current_download_dir or self.insurance_files_dir
+            self.log_message(f"Updating download preferences to: {current_dir}")
+            
+            # Method 1: Try using Chrome options if available
+            if hasattr(driver, 'options'):
+                prefs = {
+                    "download.default_directory": current_dir,
+                    "download.prompt_for_download": False,
+                    "download.directory_upgrade": True,
+                    "safebrowsing.enabled": True,
+                    "plugins.always_open_pdf_externally": True
+                }
+                driver.options.add_experimental_option("prefs", prefs)
+                self.log_message("Updated preferences using Chrome options")
+            
+            # Method 2: Try using JavaScript
+            js_script = f"""
+                const prefs = {{
+                    "download.default_directory": "{current_dir}",
+                    "download.prompt_for_download": false,
+                    "download.directory_upgrade": true,
+                    "safebrowsing.enabled": true,
+                    "plugins.always_open_pdf_externally": true
+                }};
+                Object.keys(prefs).forEach(key => {{
+                    chrome.preferences.setPref(key, prefs[key]);
+                }});
+            """
+            driver.execute_script(js_script)
+            
+            # Method 3: Try CDP command only if supported
+            if hasattr(driver, 'execute_cdp_cmd'):
+                driver.execute_cdp_cmd('Page.setDownloadBehavior', {
+                    'behavior': 'allow',
+                    'downloadPath': current_dir
+                })
+                self.log_message("Updated download behavior using CDP command")
+            
+            self.log_message("Download preferences updated successfully")
+            return True
+            
+        except Exception as e:
+            self.log_message(f"Error updating download preferences: {str(e)}")
+            return False
+    
+    
     def update_category_progress(self, category, subcategory):
         """Update category and subcategory progress"""
         self.config['current_category'] = category
