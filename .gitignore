@@ -192,6 +192,7 @@ pyvenv.cfg
 # Ignore download_stats.json and processed_urls.txt
 download_stats.json
 processed_urls.txt
+token.pickle
 
 # Ignore compiled Python files
 *.cpython-*.pyc

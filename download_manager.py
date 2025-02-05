@@ -115,23 +115,21 @@ class DownloadManager:
             self.driver.implicitly_wait(2)
             
             # Verify download and rename file
-            if self.verify_and_rename_file(cleaned_title, download_url, category, subcategory):
-                # Get file size
-                current_dir = self.config_manager.get_current_download_dir()
-                file_path = os.path.join(current_dir, cleaned_title)
-                file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
-                
+            file_info = self.verify_and_rename_file(cleaned_title, download_url, category, subcategory)
+            
+            if file_info:
                 # Add URL to processed list
                 self.url_manager.add_url(category, subcategory, url)
                 
-                # Record in report manager
+                # Record in report manager with correct filename and size
                 self.report_manager.add_download_record(
-                    filename=cleaned_title,
+                    filename=file_info['filename'],
                     category=category,
                     subcategory=subcategory,
                     url=url,
-                    file_size=file_size
+                    file_size=file_info['file_size']
                 )
+                
                 # Update progress tracker with verified count
                 self.progress_tracker.record_download(
                     category=category,
@@ -236,9 +234,9 @@ class DownloadManager:
             if original_filename.endswith('#'):
                 original_filename = original_filename[:-1]
                 
-            # Preserve original filename structure but ensure .pdf extension
-            if not original_filename.lower().endswith('.pdf'):
-                original_filename += '.pdf'
+            # # Preserve original filename structure but ensure .pdf extension
+            # if not original_filename.lower().endswith('.pdf'):
+            #     original_filename += '.pdf'
             
             self.config_manager.log_message(f"Download URL: {download_url}")
             self.config_manager.log_message(f"Original filename: {original_filename}")
@@ -270,7 +268,7 @@ class DownloadManager:
         """Verify download and rename file"""
         try:
             # Define valid extensions
-            valid_extensions =  {'.pdf', '.doc', '.docx', '.txt', '.ppt', '.pptx', '.xlsx', '.xls'}
+            valid_extensions = {'.pdf', '.doc', '.docx', '.txt', '.ppt', '.pptx', '.xlsx', '.xls'}
             
             # Initial wait for download
             time.sleep(5)
@@ -283,9 +281,8 @@ class DownloadManager:
             self.config_manager.log_message(f"Looking for file: {cleaned_title}")
             self.config_manager.log_message(f"Target directory: {current_dir}")
             
-            # Extract document ID and expected extension
+            # Extract document ID
             doc_id = download_url.split('/')[-2]
-            expected_ext = os.path.splitext(cleaned_title)[1].lower()
             
             # Wait for file with timeout
             max_attempts = 3
@@ -295,7 +292,6 @@ class DownloadManager:
             for attempt in range(max_attempts):
                 self.config_manager.log_message(f"\nAttempt {attempt + 1} of {max_attempts}")
                 
-                # Check directories in priority order
                 directories_to_check = [
                     (current_dir, "Target Directory"),
                     (base_dir, "Base Directory"),
@@ -318,36 +314,12 @@ class DownloadManager:
                         self.config_manager.log_message(f"Found files: {files}")
                         
                         for file in files:
-                            file_lower = file.lower()
-                            file_ext = os.path.splitext(file_lower)[1]
-                            
-                            # Try different matching strategies
-                            is_match = False
-                            match_reason = ""
-                            
-                            # 1. Exact match
-                            if file == cleaned_title:
-                                is_match = True
-                                match_reason = "exact match"
-                                
-                            # 2. Document ID match
-                            elif doc_id in file:
-                                is_match = True
-                                match_reason = "document ID match"
-                                
-                            # 3. Name content match
-                            elif all(word.lower() in file_lower for word in cleaned_title.lower().split('-')):
-                                is_match = True
-                                match_reason = "content match"
-                            
-                            if is_match:
+                            # Document ID match is primary criteria
+                            if doc_id in file:
                                 found_file = file
                                 source_dir = directory
-                                self.config_manager.log_message(f"Found file: {file} ({match_reason})")
+                                self.config_manager.log_message(f"Found file: {file} (document ID match)")
                                 break
-                        
-                        if found_file:
-                            break
                     
                     if found_file:
                         break
@@ -360,57 +332,54 @@ class DownloadManager:
             
             if not found_file:
                 self.config_manager.log_message("No matching file found after all attempts")
-                return False
+                return None
             
             self.config_manager.log_message(f"\n=== Moving File ===")
             self.config_manager.log_message(f"Found file: {found_file}")
             self.config_manager.log_message(f"Source: {source_dir}")
             self.config_manager.log_message(f"Target: {current_dir}")
             
-            # Ensure target directory exists
-            os.makedirs(current_dir, exist_ok=True)
+            # Get actual extension from found file
+            actual_extension = os.path.splitext(found_file)[1].lower()
+            
+            # Create new filename with correct extension
+            new_filename = os.path.splitext(cleaned_title)[0] + actual_extension
             
             # Setup paths
             old_path = os.path.join(source_dir, found_file)
-            new_path = os.path.join(current_dir, cleaned_title)
-            
-            # Preserve original extension if different
-            if os.path.splitext(found_file)[1].lower() != os.path.splitext(cleaned_title)[1].lower():
-                new_path = os.path.join(current_dir, 
-                                    os.path.splitext(cleaned_title)[0] + 
-                                    os.path.splitext(found_file)[1])
-                cleaned_title = os.path.basename(new_path)
+            new_path = os.path.join(current_dir, new_filename)
             
             # Handle file already exists
             if os.path.exists(new_path):
-                base, ext = os.path.splitext(cleaned_title)
+                base, ext = os.path.splitext(new_filename)
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                cleaned_title = f"{base}_{timestamp}{ext}"
-                new_path = os.path.join(current_dir, cleaned_title)
+                new_filename = f"{base}_{timestamp}{ext}"
+                new_path = os.path.join(current_dir, new_filename)
+            
+            # Ensure target directory exists
+            os.makedirs(current_dir, exist_ok=True)
             
             # Move file
             try:
                 os.rename(old_path, new_path)
                 self.config_manager.log_message(f"Successfully moved file to: {new_path}")
-                # Update report
-                try:
-                    file_size = os.path.getsize(new_path)
-                    self.report_manager.add_download_record(
-                        filename=cleaned_title,
-                        document_title=cleaned_title,
-                        url=download_url,
-                        file_size=file_size
-                    )
-                except Exception as e:
-                    self.config_manager.log_message(f"Error updating report: {str(e)}")
                 
-                return True
+                # Get file size
+                file_size = os.path.getsize(new_path)
                 
+                # Return file information instead of adding to report
+                return {
+                    'filename': new_filename,
+                    'file_size': file_size,
+                    'file_path': new_path
+                }
+                    
             except Exception as e:
                 self.config_manager.log_message(f"Error moving file: {str(e)}")
-                return False
+                return None
                 
         except Exception as e:
             self.config_manager.log_message(f"Error in file verification: {str(e)}")
             self.config_manager.log_message(traceback.format_exc())
-            return False
+            return None
+        
