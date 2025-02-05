@@ -1,66 +1,86 @@
-# main.py
 """
-    Single ScribdScraper class that manages all components
-Clear initialization sequence
-Organized execution flow
-Proper error handling and logging
-Resource cleanup
-
-    Returns:
-        _type_: _description_
+ScribdScraper: Main class that manages sequential category-subcategory based scraping
+with organized directory structure and simplified search mechanism.
 """
+import traceback
 from selenium.webdriver.remote.webdriver import WebDriver
 import time
 
-# Import our managers
+# Import managers
 from config_manager import ConfigManager
 from auth_manager import AuthManager
 from download_manager import DownloadManager
-from search_pattern_generator import SearchPatternGenerator
+from search_generator import SearchMechanism
 from SearchExecutionManager import SearchExecutionManager
-from ValidationManager import ValidationManager
 from ProgressTracker import ProgressTracker
 
-# Import data and existing utilities
+# Import utilities
 from insurance_data import INSURANCE_CATEGORIES
-from file_count_tracker import DownloadTracker
 from file_naming_convention import DocumentNameHandler
+from category_processor import CategoryProcessor
+from ProcessedURLManager import ProcessedURLManager
 from report import DownloadReportManager
+
 
 class ScribdScraper:
     def __init__(self):
-        """Initialize the scraper with all necessary managers"""
-        # Initialize config manager first
-        self.config_manager = ConfigManager()
-        
-        # Initialize tracking and reporting
-        self.download_tracker = DownloadTracker(log_file=self.config_manager.log_file)
-        self.name_handler = DocumentNameHandler(self.config_manager.log_file)
-        self.report_manager = DownloadReportManager()
-        
-        # Setup WebDriver
-        self.driver = self.setup_driver()
-        
-        # Initialize all managers
-        self.auth_manager = AuthManager(self.driver, self.config_manager)
-        self.download_manager = DownloadManager(
-            self.driver,
-            self.config_manager,
-            self.download_tracker,
-            self.name_handler,
-            self.report_manager
-        )
-        
-        # Initialize search and validation components
-        self.pattern_generator = SearchPatternGenerator(INSURANCE_CATEGORIES)
-        self.validator = ValidationManager()
-        self.progress_tracker = ProgressTracker()
-        self.search_executor = SearchExecutionManager(
-            self.pattern_generator.generate_all_patterns(),
-            self.driver,
-            self.progress_tracker,
-            self.validator
-        )
+        """Initialize the scraper with all necessary components"""
+        try:
+            # Initialize config manager first
+            self.config_manager = ConfigManager()
+            
+            # Initialize progress tracker first (since other components depend on it)
+            self.progress_tracker = ProgressTracker(self.config_manager.log_dir)
+            
+            # Initialize category tracking
+            self.progress_tracker.initialize_category_tracking(INSURANCE_CATEGORIES)
+            
+            # Get resume point
+            resume_point = self.progress_tracker.get_resume_point()
+            
+            # Initialize tracking and management components
+            self.name_handler = DocumentNameHandler(self.config_manager.log_file)
+            self.url_manager = ProcessedURLManager(
+                log_file=self.config_manager.log_file
+            )
+            self.report_manager = DownloadReportManager(
+            excel_file='download_reports.xlsx',
+            spreadsheet_id='1sbKp5Xa_NPd5Bp6MbaS_eaLlgLzsdX_t3jcms3zgXQ4'
+            )
+                    
+            # Setup WebDriver
+            self.driver = self.setup_driver()
+            
+            # Initialize core managers
+            self.auth_manager = AuthManager(self.driver, self.config_manager)
+            self.download_manager = DownloadManager(
+                self.driver,
+                self.config_manager,
+                self.name_handler,
+                self.progress_tracker,
+                self.url_manager,
+                self.report_manager
+            )
+            
+            # Initialize search components
+            self.search_mechanism = SearchMechanism(INSURANCE_CATEGORIES)
+            current_search = self.search_mechanism.initialize_search(resume_point)
+            self.search_executor = SearchExecutionManager(
+                driver=self.driver,
+                progress_tracker=self.progress_tracker,  # Explicitly name the parameter
+                config_manager = self.config_manager,
+                url_manager=self.url_manager
+            )
+
+            # Log successful initialization
+            self.config_manager.log_message("All components initialized successfully")
+
+        except Exception as e:
+            error_msg = f"Error initializing ScribdScraper: {str(e)}"
+            if hasattr(self, 'config_manager'):
+                self.config_manager.log_message(error_msg)
+            print(error_msg)
+            raise
 
     def setup_driver(self):
         """Setup and return WebDriver"""
@@ -87,81 +107,147 @@ class ScribdScraper:
                 self.config_manager.log_message("Failed to login, stopping execution")
                 return
 
-            # Execute search patterns
-            search_results = self.search_executor.execute_search_sequence()
+            # Get resume point
+            resume_point = self.progress_tracker.get_resume_point()
+            current_search = self.search_mechanism.initialize_search(resume_point)
             
-            if not search_results:
-                self.config_manager.log_message("No search results found")
-                return
-
-            # Process search results
-            self.process_search_results(search_results)
+            while current_search:
+                try:
+                    category = current_search['category']
+                    subcategory = current_search['subcategory']
+                    search_term = current_search['search_term']
+                    
+                    # Update progress tracker position
+                    self.progress_tracker.update_position(
+                        category=category,
+                        subcategory=subcategory,
+                        category_index=current_search['category_index'],
+                        subcategory_index=current_search['subcategory_index']
+                    )
+                    
+                    # Check if subcategory is already complete
+                    if self.progress_tracker.is_subcategory_complete(category, subcategory):
+                        self.config_manager.log_message(f"Subcategory {subcategory} already completed, skipping...")
+                        current_search = self.search_mechanism.move_to_next()
+                        continue
+                    
+                    self.config_manager.log_message(f"\n=== Processing: {category} - {subcategory} ===")
+                    self.config_manager.log_message(f"Search term: {search_term}")
+                    
+                    # Setup directories
+                    self.config_manager.setup_category_directory(category)
+                    current_dir = self.config_manager.setup_subcategory_directory(category, subcategory)
+                    
+                    # Execute search
+                    search_success, found_urls = self.search_executor.execute_search_with_retries(
+                        category,
+                        subcategory,
+                        search_term
+                    )
+                    
+                    if search_success and found_urls:
+                        self.config_manager.log_message(f"Found {len(found_urls)} URLs to process")
+                        downloaded_count = 0
+                        
+                        for url in found_urls:
+                            if self.url_manager.is_processed(url):
+                                continue
+                                
+                            success = self.download_manager.download_document(
+                                url,
+                                category,
+                                subcategory
+                            )
+                            
+                            if success:
+                                downloaded_count += 1
+                                # Don't record download here since it's already done in download_manager
+                                
+                                # Check if we've reached 2 downloads
+                                if downloaded_count >= 2:
+                                    self.progress_tracker.mark_subcategory_complete(category, subcategory)
+                                    break
+                            
+                            time.sleep(2)
+                    
+                    # Move to next search item
+                    current_search = self.search_mechanism.move_to_next()
+                    
+                    # Check category completion
+                    if current_search and current_search.get('is_last_subcategory'):
+                        if self.progress_tracker.is_category_complete(category):
+                            self.progress_tracker.check_category_completion(category)
+                            self.config_manager.log_message(f"Completed category: {category}")
+                    
+                    time.sleep(3)
+                    
+                except Exception as e:
+                    self.config_manager.log_message(f"Error processing search: {str(e)}")
+                    current_search = self.search_mechanism.move_to_next()
+                    continue
 
             # Print final statistics
             self.print_final_stats()
 
         except Exception as e:
             self.config_manager.log_message(f"Critical error in main execution: {str(e)}")
+            self.config_manager.log_message(traceback.format_exc())
         finally:
             self.cleanup()
 
-    def process_search_results(self, search_results):
-        """Process the search results and download documents"""
+    def print_interim_stats(self, category, subcategory):
+        """Print interim statistics"""
         try:
-            for category, subcategories in search_results.items():
-                for subcategory, results in subcategories.items():
-                    self.config_manager.log_message(f"Processing results for {category} - {subcategory}")
-                    
-                    for result_url in results:
-                        if self.should_process_url(result_url):
-                            success = self.download_manager.download_document(result_url)
-                            
-                            if success:
-                                self.mark_url_processed(result_url)
-                            
-                            # Add delay between downloads
-                            time.sleep(5)
-
-        except Exception as e:
-            self.config_manager.log_message(f"Error processing search results: {str(e)}")
-
-    def should_process_url(self, url):
-        """Check if URL should be processed"""
-        if 'www.scribd.com/document/' not in url:
-            return False
+            progress = self.search_mechanism.get_search_progress()
+            url_stats = self.url_manager.get_stats()
+            download_stats = self.progress_tracker.get_daily_count()
             
-        # Check if URL was already processed
-        processed_urls = self.load_processed_urls()
-        return url not in processed_urls
-
-    def mark_url_processed(self, url):
-        """Mark URL as processed"""
-        try:
-            with open('processed_urls.txt', 'a') as f:
-                f.write(f"{url}\n")
+            stats = f"""
+            === Progress Report: {category} - {subcategory} ===
+            Processed Categories: {progress['processed_categories']}/{progress['total_categories']}
+            Processed Subcategories: {progress['processed_subcategories']}/{progress['total_subcategories']}
+            URLs Processed: {url_stats['total_urls']}
+            Today's Downloads: {download_stats}
+            Completion: {progress['completion_percentage']:.2f}%
+            ===============================================
+            """
+            self.config_manager.log_message(stats)
         except Exception as e:
-            self.config_manager.log_message(f"Error marking URL as processed: {str(e)}")
-
-    def load_processed_urls(self):
-        """Load previously processed URLs"""
-        try:
-            with open('processed_urls.txt', 'r') as f:
-                return [line.strip() for line in f.readlines()]
-        except FileNotFoundError:
-            return []
-        except Exception as e:
-            self.config_manager.log_message(f"Error loading processed URLs: {str(e)}")
-            return []
+            self.config_manager.log_message(f"Error printing interim stats: {str(e)}")
 
     def print_final_stats(self):
-        """Print final statistics"""
-        self.download_tracker.print_stats()
-        self.progress_tracker.print_progress_report()
+        """Print final processing statistics"""
+        try:
+            progress = self.search_mechanism.get_search_progress()
+            url_stats = self.url_manager.get_stats()
+            download_stats = self.progress_tracker.print_stats()
+            
+            final_stats = f"""
+            === Final Processing Statistics ===
+            Categories Processed: {progress['processed_categories']}/{progress['total_categories']}
+            Subcategories Processed: {progress['processed_subcategories']}/{progress['total_subcategories']}
+            Total URLs Processed: {url_stats['total_urls']}
+            
+            Download Statistics:
+            {download_stats}
+            
+            URL Processing by Category:
+            """
+            
+            for category, cat_stats in url_stats['categories'].items():
+                final_stats += f"\n{category}: {cat_stats['total']} URLs"
+                for subcat, count in cat_stats['subcategories'].items():
+                    final_stats += f"\n  - {subcat}: {count} URLs"
+            
+            self.config_manager.log_message(final_stats)
+        except Exception as e:
+            self.config_manager.log_message(f"Error printing final stats: {str(e)}")
 
     def cleanup(self):
         """Cleanup resources"""
         try:
             self.driver.quit()
+            self.url_manager.cleanup()
             self.config_manager.log_message("Browser session ended, log file closed.")
         except Exception as e:
             self.config_manager.log_message(f"Error during cleanup: {str(e)}")

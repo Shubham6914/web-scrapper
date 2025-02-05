@@ -128,8 +128,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-.venv
+env
+venv
 env/
 venv/
 ENV/
@@ -171,17 +171,11 @@ cython_debug/
 .pypirc
 
 # Folders to ignore
-chrome-user-data/
-files/
-logs/
-myvenv/
-__pycache__/
-.pytest_cache/
-bin/
-include/
-lib/
-lib64/
-
+chrome-user-data
+INSURANCE_FILES
+logs
+myvenv
+credentials.json
 # Files to ignore
 download_reports.xlsx
 *.pyc
@@ -198,6 +192,13 @@ pyvenv.cfg
 # Ignore download_stats.json and processed_urls.txt
 download_stats.json
 processed_urls.txt
+token.pickle
 
 # Ignore compiled Python files
 *.cpython-*.pyc
+
+
+# Compiled Python bytecode
+*.py[cod]
+__pycache__
+*.pyc

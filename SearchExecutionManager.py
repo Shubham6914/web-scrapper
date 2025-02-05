@@ -1,306 +1,209 @@
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-from datetime import time
-# import progress trackeer class to track progress 
+import time
+
 from ProgressTracker import ProgressTracker
-# import validation manager class to validate
-from ValidationManager import ValidationManager
+from ProcessedURLManager import ProcessedURLManager  # New import
 
 class SearchExecutionManager:
-    def __init__(self, search_patterns, driver,progress_tracker=None, validator=None):
+    def __init__(self, driver,config_manager, progress_tracker=None, url_manager=None,):
         """
-        Initialize the Search Execution Manager
-        
-        Parameters:
-        - search_patterns: Dictionary of generated search patterns from SearchPatternGenerator
-        - driver: Selenium WebDriver instance
+        Initialize Search Execution Manager
+        Args:
+            driver: Selenium WebDriver instance
+            progress_tracker: ProgressTracker instance
+            url_manager: ProcessedURLManager instance
         """
-        self.search_patterns = search_patterns
         self.driver = driver
-        # Use provided instances or create new ones
+        self.config_manager = config_manager
         self.progress_tracker = progress_tracker if progress_tracker else ProgressTracker()
-        self.validator = validator if validator else ValidationManager()
-            
-        # Track current search progress
-        self.current_progress = {
-            'category': None,
-            'subcategory': None,
-            'pattern_index': 0,
-            'successful_patterns': set()
-        }
+        self.url_manager = url_manager if url_manager else ProcessedURLManager()
         
-        # Store search results and metrics
-        self.search_results = {
-            'successful_searches': {},
-            'failed_searches': {},
-            'documents_found': {}
-        }
-        
-        # Configure search settings
         self.search_config = {
-            'min_results': 3,          # Minimum results needed to consider search successful
-            'max_retries': 2,          # Maximum retry attempts for failed searches
-            'wait_time': 10            # Maximum wait time for results
-    
+            'wait_time': 10,
+            'min_results': 2,
+            'max_results': 5,
+            'search_delay': 3
         }
-        # Initialize progress tracker
-        self.progress_tracker = ProgressTracker()
-        # initialize validator
-        self.validator = ValidationManager()
 
-        
-    def execute_search_sequence(self):
+    def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
         """
-        Main method to execute the search sequence for all patterns
-        Returns: Dictionary of search results and statistics
-        """
-        # Get resume point if any
-        resume_point = self.progress_tracker.get_resume_point()
-        
-        try:
-            # Iterate through each insurance category
-            for category, subcategories in self.search_patterns.items():
-                # Skip categories until resume point if exists
-                if resume_point['category'] and category != resume_point['category']:
-                    continue
-                    
-                self.current_progress['category'] = category
-                print(f"\nProcessing category: {category}")
-                
-                # Process each subcategory
-                for subcategory, patterns in subcategories.items():
-                    # Skip subcategories until resume point if exists
-                    if resume_point['subcategory'] and subcategory != resume_point['subcategory']:
-                        continue
-                        
-                    self.current_progress['subcategory'] = subcategory
-                    print(f"\nProcessing subcategory: {subcategory}")
-                    
-                    # Execute patterns in priority order
-                    for pattern_index, pattern in enumerate(patterns):
-                        # Skip patterns until resume point if exists
-                        if resume_point['pattern_index'] and pattern_index < resume_point['pattern_index']:
-                            continue
-                            
-                        self.current_progress['pattern_index'] = pattern_index
-                        
-                        # Execute search with current pattern
-                        search_success, results = self.search_with_pattern(pattern)
-                        
-                        # Update progress tracker
-                        self.progress_tracker.update_search_progress(
-                            category=category,
-                            subcategory=subcategory,
-                            pattern=pattern,
-                            success=search_success,
-                            documents=len(results) if results else 0
-                        )
-                        
-                        # If search was successful, store pattern
-                        if search_success:
-                            self.current_progress['successful_patterns'].add(pattern)
-                            
-                        # Track progress
-                        self.track_progress()
-                        
-                        # If we have enough successful results, mark subcategory complete and move to next
-                        if len(self.current_progress['successful_patterns']) >= self.search_config['min_results']:
-                            self.progress_tracker.mark_subcategory_complete(category, subcategory)
-                            break
-                    
-                    # Clear successful patterns for next subcategory
-                    self.current_progress['successful_patterns'].clear()
-                    
-                # Print progress report after each category
-                self.progress_tracker.print_progress_report()
-                
-            return self.search_results
-                    
-        except Exception as e:
-            print(f"Error in search execution: {str(e)}")
-            # Save progress before returning None
-            self.progress_tracker.save_progress()
-            return None
-
-    
-    def search_with_pattern(self, pattern):
-        """
-        Execute search with a single pattern
-        
-        Parameters:
-        - pattern: Search pattern to execute
-        
+        Execute search with retries
+        Args:
+            category: Current category
+            subcategory: Current subcategory
+            search_term: Term to search
+            max_attempts: Maximum number of retry attempts
         Returns:
-        - Tuple: (success_status: bool, results: list)
+            tuple: (success_status, urls_list)
+        """
+        self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
+        
+        for attempt in range(max_attempts):
+            try:
+                self.config_manager.log_message(f"Attempt {attempt + 1} of {max_attempts}")
+                
+                success, urls = self.execute_single_search(category, subcategory, search_term)
+                
+                if success and urls:
+                    self.config_manager.log_message(f"Successfully found URLs on attempt {attempt + 1}")
+                    return True, urls
+                
+                # If not successful and not last attempt, wait before retry
+                if attempt < max_attempts - 1:
+                    self.config_manager.log_message(f"No URLs found, waiting before retry...")
+                    time.sleep(5)  # Wait between attempts
+                
+            except Exception as e:
+                self.config_manager.log_message(f"Error in search attempt {attempt + 1}: {str(e)}")
+                if attempt < max_attempts - 1:
+                    time.sleep(5)  # Wait before retry
+        
+        self.config_manager.log_message(f"No URLs found after {max_attempts} attempts")
+        return False, []
+
+    def execute_single_search(self, category, subcategory, search_term):
+        """
+        Execute single search attempt
+        Args:
+            category: Current category
+            subcategory: Current subcategory
+            search_term: Term to search
+        Returns:
+            tuple: (success_status, urls_list)
         """
         try:
-            print(f"Attempting search with pattern: {pattern}")
+            self.config_manager.log_message(f"Executing search with term: {search_term}")
+            print(f"\nSearching for: {search_term}")
+            print(f"Category: {category}, Subcategory: {subcategory}")
+            
             # Navigate to search page
             self.driver.get('https://www.scribd.com/search')
             
-            # Find and clear search input with better wait handling
-            try:
-                search_input = WebDriverWait(self.driver, self.search_config['wait_time']).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="search"]'))
+            # Find and clear search input
+            search_input = WebDriverWait(self.driver, self.search_config['wait_time']).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="search"]'))
+            )
+            search_input.clear()
+            
+            # Input search term
+            search_input.send_keys(search_term)
+            search_input.send_keys(Keys.RETURN)
+            
+            # Wait for results
+            time.sleep(self.search_config['search_delay'])
+            
+            # Get and filter URLs
+            urls = self.collect_document_urls(category, subcategory)
+            
+            if urls:
+                self.config_manager.log_message(f"Found {len(urls)} URLs: {urls}")
+                print(f"Found {len(urls)} new documents")
+                self.progress_tracker.update_search_progress(
+                    category=category,
+                    subcategory=subcategory,
+                    success=True
                 )
-                print("Found search input")
-
-                search_input.clear()
-                
-                # Input search pattern
-                search_input.send_keys(pattern)
-                search_input.send_keys(Keys.RETURN)
-                print(f"Entered search pattern: {pattern}")
-                
-                # Wait for search results to load
-                WebDriverWait(self.driver, self.search_config['wait_time']).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div[class*="search-results"]'))
-                )
-                
-                print("Search results container found")
-                # Add small delay to ensure results are fully loaded
-                time.sleep(2)
-                
-                # Validate results
-                validation_result = self.validate_search_results()
-                print(f"Validation result: {validation_result}")
-                # Validate results and get them if successful
-                if validation_result:
-                    results = self.driver.find_elements(By.CSS_SELECTOR, 'a[class^="FluidCell-module_linkOverlay"]')
-                    print(f"Found {len(results)} results")
-                    # Additional validation of results
-                    if results and len(results) >= self.search_config['min_results']:
-                        print(f"Found {len(results)} results for pattern: {pattern}")
-                        return True, results
-                    else:
-                        print(f"Insufficient results found for pattern: {pattern}")
-                        return False, []
-                
-                print(f"Search validation failed for pattern: {pattern}")
-                return False, []
-                
-            except Exception as e:
-                print(f"Error during search execution: {str(e)}")
-                return False, []
-                
-        except Exception as e:
-            print(f"Critical error executing search pattern '{pattern}': {str(e)}")
-            # Attempt to refresh page on critical error
-            try:
-                self.driver.refresh()
-            except:
-                pass
+                return True, urls
+            
+            self.config_manager.log_message("No URLs found in search results")
+            print("No new results found")
+            self.progress_tracker.update_search_progress(
+                category=category,
+                subcategory=subcategory,
+                success=False
+            )
             return False, []
+            
+        except Exception as e:
+            self.config_manager.log_message(f"Error executing search: {str(e)}")
+            return False, []
+            
+    def collect_document_urls(self, category, subcategory):
+        """Collect and filter document URLs"""
+        try:
+            elements = self.driver.find_elements(
+                By.CSS_SELECTOR, 'a[class^="FluidCell-module_linkOverlay"]'
+            )
+            
+            new_urls = []
+            for element in elements:
+                try:
+                    url = element.get_attribute('href')
+                    if (url and 
+                        'www.scribd.com/document/' in url and 
+                        not self.url_manager.is_processed(url)):
+                        new_urls.append(url)
+                        
+                        if len(new_urls) >= self.search_config['max_results']:
+                            break
+                            
+                except Exception as e:
+                    print(f"Error getting URL: {str(e)}")
+                    continue
+                    
+            return new_urls
+            
+        except Exception as e:
+            print(f"Error collecting URLs: {str(e)}")
+            return []
 
-    def validate_search_results(self):
+    def validate_results(self, category, subcategory):
         """
-        Validate the search results
-        
+        Validate search results
+        Args:
+            category: Current category
+            subcategory: Current subcategory
         Returns:
-        - Boolean indicating if results are valid
+            bool: Validation status
         """
         try:
-            print("Starting result validation")
-            # Wait for results container
             results_container = WebDriverWait(self.driver, self.search_config['wait_time']).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'div[class*="search-results"]'))
             )
-            print("Found results container")
-            # Check for "no results" message
+            
+            # Check for no results
             try:
                 no_results = self.driver.find_element(By.XPATH, "//div[contains(text(), 'No results for')]")
                 if no_results:
-                    print("No results found message detected")
                     return False
             except:
-                pass  # No "no results" message found, continue validation
+                pass
             
-            # Find all result elements
+            # Get all results
             results = results_container.find_elements(By.CSS_SELECTOR, 'a[class^="FluidCell-module_linkOverlay"]')
             
-            # Check if we have minimum required results
-            if len(results) >= self.search_config['min_results']:
-                # Verify result relevance
-                relevant_count = 0
-                for result in results[:5]:  # Check first 5 results
-                    try:
-                        title = result.get_attribute('title').lower()
-                        # Check if result matches current category/subcategory
-                        if (self.current_progress['category'].lower() in title or 
-                            self.current_progress['subcategory'].lower() in title):
-                            relevant_count += 1
-                    except:
-                        continue
-                
-                # Return True if we have enough relevant results
-                return relevant_count >= 2  # At least 2 relevant results
+            # Filter out processed URLs
+            new_results = [
+                result for result in results 
+                if not self.url_manager.is_processed(result.get_attribute('href'))
+            ]
             
-            return False
+            return len(new_results) >= self.search_config['min_results']
             
         except Exception as e:
             print(f"Error validating results: {str(e)}")
             return False
-    
 
-    def track_progress(self):
+    def mark_url_processed(self, url, category, subcategory):
         """
-        Track and log search progress
+        Mark URL as processed after successful download
+        Args:
+            url: Processed URL
+            category: Current category
+            subcategory: Current subcategory
         """
         try:
-            # Calculate progress metrics
-            category = self.current_progress['category']
-            subcategory = self.current_progress['subcategory']
-            successful_patterns = len(self.current_progress['successful_patterns'])
-            
-            # Log progress
-            progress_msg = (
-                f"Progress - Category: {category}, "
-                f"Subcategory: {subcategory}, "
-                f"Successful Patterns: {successful_patterns}"
-            )
-            print(progress_msg)
-            
-            # Store progress in results
-            if category not in self.search_results:
-                self.search_results[category] = {}
-            
-            self.search_results[category][subcategory] = {
-                'successful_patterns': list(self.current_progress['successful_patterns']),
-                'pattern_index': self.current_progress['pattern_index']
-            }
-            
+            self.url_manager.add_url(category, subcategory, url)
         except Exception as e:
-            print(f"Error tracking progress: {str(e)}")
+            print(f"Error marking URL as processed: {str(e)}")
 
-    def _store_successful_search(self, pattern):
+    def get_processed_stats(self):
         """
-        Store successful search pattern and results
+        Get statistics about processed URLs
+        Returns:
+            dict: URL processing statistics
         """
-        category = self.current_progress['category']
-        subcategory = self.current_progress['subcategory']
-        
-        if category not in self.search_results['successful_searches']:
-            self.search_results['successful_searches'][category] = {}
-        
-        if subcategory not in self.search_results['successful_searches'][category]:
-            self.search_results['successful_searches'][category][subcategory] = []
-        
-        self.search_results['successful_searches'][category][subcategory].append(pattern)
-
-    def _store_failed_search(self, pattern):
-        """
-        Store failed search pattern
-        """
-        category = self.current_progress['category']
-        subcategory = self.current_progress['subcategory']
-        
-        if category not in self.search_results['failed_searches']:
-            self.search_results['failed_searches'][category] = {}
-        
-        if subcategory not in self.search_results['failed_searches'][category]:
-            self.search_results['failed_searches'][category][subcategory] = []
-        
-        self.search_results['failed_searches'][category][subcategory].append(pattern)
+        return self.url_manager.get_stats()
