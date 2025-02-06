@@ -191,6 +191,7 @@ pyvenv.cfg
 
 # Ignore download_stats.json and processed_urls.txt
 download_stats.json
+config.json
 processed_urls.txt
 token.pickle
 
