@@ -4,11 +4,13 @@ import os
 from typing import Dict, Any
 
 class ProgressTracker:
-    def __init__(self, log_dir: str = 'logs'):
+    def __init__(self,log_dir: str = 'logs'):
         """Initialize Progress Tracker"""
+        
         self.log_dir = log_dir
         self.progress_file = os.path.join(log_dir, 'search_progress.json')
         self.session_log = os.path.join(log_dir, f'session_{self.get_timestamp()}.log')
+        
 
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
@@ -113,7 +115,7 @@ class ProgressTracker:
                 self.progress_data['completed']['subcategories'][category].append(subcategory)
                 self.progress_data['statistics']['completed_subcategories'] += 1
                 self.save_progress()
-                self.log_message(f"Marked subcategory {subcategory} as complete")
+                self.log_message(f"Marked subcategory {subcategory} as complete after processing all available URLs")
                 
                 # Check category completion
                 self.check_category_completion(category)
@@ -222,11 +224,18 @@ class ProgressTracker:
             return None
         
     def is_subcategory_complete(self, category: str, subcategory: str) -> bool:
-        """Check if subcategory has required downloads"""
+        """
+        Check if subcategory is marked as complete in progress data
+        Args:
+            category: Category name
+            subcategory: Subcategory name
+        Returns:
+            bool: True if subcategory is marked complete, False otherwise
+        """
         try:
-            downloads = self.progress_data['completed']['downloads'].get(category, {}).get(subcategory, 0)
-            required_downloads = 2  # Set explicit requirement
-            return downloads >= required_downloads
+            # Check if the subcategory is marked as complete in progress data
+            completed_subcategories = self.progress_data['completed'].get(category, {}).get('subcategories', [])
+            return subcategory in completed_subcategories
         except Exception as e:
             self.log_message(f"Error checking subcategory completion: {str(e)}")
             return False

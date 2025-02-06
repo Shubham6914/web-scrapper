@@ -25,19 +25,13 @@ class SearchExecutionManager:
             'wait_time': 10,
             'min_results': 2,
             'max_results': 5,
-            'search_delay': 3
+            'search_delay': 3,
+            'max_page_limit': 2  # New: Maximum pages to process
         }
 
     def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
         """
-        Execute search with retries
-        Args:
-            category: Current category
-            subcategory: Current subcategory
-            search_term: Term to search
-            max_attempts: Maximum number of retry attempts
-        Returns:
-            tuple: (success_status, urls_list)
+        Execute search with retries using direct URL pagination
         """
         self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
         
@@ -45,23 +39,56 @@ class SearchExecutionManager:
             try:
                 self.config_manager.log_message(f"Attempt {attempt + 1} of {max_attempts}")
                 
-                success, urls = self.execute_single_search(category, subcategory, search_term)
+                all_urls = []
                 
-                if success and urls:
-                    self.config_manager.log_message(f"Successfully found URLs on attempt {attempt + 1}")
-                    return True, urls
+                # Process pages using direct URL pagination
+                for page in range(1, self.search_config['max_page_limit'] + 1):
+                    self.config_manager.log_message(f"\nProcessing page {page}")
+                    
+                    # Construct search URL with page number
+                    search_url = f'https://www.scribd.com/search?query={search_term}&page={page}'
+                    self.config_manager.log_message(f"Navigating to: {search_url}")
+                    
+                    # Navigate to search URL
+                    self.driver.get(search_url)
+                    time.sleep(self.search_config['search_delay'])
+                    
+                    # Check for no results
+                    try:
+                        no_results = self.driver.find_element(By.XPATH, "//div[contains(text(), 'No results for')]")
+                        if no_results:
+                            self.config_manager.log_message(f"No results found on page {page}, ending search.")
+                            break
+                    except:
+                        pass
+                    
+                    # Collect URLs from current page
+                    page_urls = self.collect_document_urls(category, subcategory)
+                    
+                    if page_urls:
+                        all_urls.extend(page_urls)
+                        self.config_manager.log_message(f"Found {len(page_urls)} URLs on page {page}")
+                    else:
+                        self.config_manager.log_message(f"No URLs found on page {page}, ending search.")
+                        break
+                    
+                    # Add delay between pages
+                    if page < self.search_config['max_page_limit']:
+                        time.sleep(self.search_config['search_delay'])
                 
-                # If not successful and not last attempt, wait before retry
+                if all_urls:
+                    self.config_manager.log_message(f"Total URLs found: {len(all_urls)}")
+                    return True, all_urls
+                
                 if attempt < max_attempts - 1:
-                    self.config_manager.log_message(f"No URLs found, waiting before retry...")
-                    time.sleep(5)  # Wait between attempts
+                    self.config_manager.log_message("No URLs found, waiting before retry...")
+                    time.sleep(5)
                 
             except Exception as e:
                 self.config_manager.log_message(f"Error in search attempt {attempt + 1}: {str(e)}")
                 if attempt < max_attempts - 1:
-                    time.sleep(5)  # Wait before retry
+                    time.sleep(5)
         
-        self.config_manager.log_message(f"No URLs found after {max_attempts} attempts")
         return False, []
 
     def execute_single_search(self, category, subcategory, search_term):
@@ -137,8 +164,8 @@ class SearchExecutionManager:
                         not self.url_manager.is_processed(url)):
                         new_urls.append(url)
                         
-                        if len(new_urls) >= self.search_config['max_results']:
-                            break
+                        # if len(new_urls) >= self.search_config['max_results']:
+                        #     break
                             
                 except Exception as e:
                     print(f"Error getting URL: {str(e)}")
@@ -207,3 +234,45 @@ class SearchExecutionManager:
             dict: URL processing statistics
         """
         return self.url_manager.get_stats()
+    
+    def calculate_completion_status(self, category, subcategory, search_term):
+        """
+        Calculate completion status for a subcategory
+        """
+        try:
+            # Get all available URLs using the pagination-aware search
+            success, fetched_urls = self.execute_search_with_retries(
+                category, 
+                subcategory, 
+                search_term
+            )
+            
+            total_urls = len(fetched_urls)
+            print(f"Total available URLs for {subcategory}: {total_urls}")
+
+            # Get current download count
+            current_downloads = self.progress_tracker.get_subcategory_downloads(category, subcategory)
+            print(f"Current downloads for {subcategory}: {current_downloads}")
+
+            # Handle case when no URLs are found
+            if total_urls == 0:
+                if current_downloads > 0:
+                    # If we already have downloads but no new URLs, consider it complete
+                    required_downloads = current_downloads
+                    return True, current_downloads, required_downloads, total_urls
+                else:
+                    # No URLs and no downloads
+                    return False, 0, 0, 0
+
+            # Calculate required downloads (minimum 1)
+            required_downloads = max(total_urls // 2, 1)
+            print(f"Required downloads for {subcategory}: {required_downloads} (half of {total_urls} total URLs)")
+
+            # Check completion status
+            is_complete = current_downloads >= required_downloads
+
+            return is_complete, current_downloads, required_downloads, total_urls
+
+        except Exception as e:
+            self.config_manager.log_message(f"Error calculating completion status: {str(e)}")
+            return False, 0, 0, 0

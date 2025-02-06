@@ -53,14 +53,7 @@ class ScribdScraper:
             
             # Initialize core managers
             self.auth_manager = AuthManager(self.driver, self.config_manager)
-            self.download_manager = DownloadManager(
-                self.driver,
-                self.config_manager,
-                self.name_handler,
-                self.progress_tracker,
-                self.url_manager,
-                self.report_manager
-            )
+            
             
             # Initialize search components
             self.search_mechanism = SearchMechanism(INSURANCE_CATEGORIES)
@@ -70,6 +63,15 @@ class ScribdScraper:
                 progress_tracker=self.progress_tracker,  # Explicitly name the parameter
                 config_manager = self.config_manager,
                 url_manager=self.url_manager
+            )
+            self.download_manager = DownloadManager(
+                self.driver,
+                self.config_manager,
+                self.name_handler,
+                self.progress_tracker,
+                self.url_manager,
+                self.report_manager,
+                self.search_executor
             )
 
             # Log successful initialization
@@ -147,7 +149,8 @@ class ScribdScraper:
                     
                     if search_success and found_urls:
                         self.config_manager.log_message(f"Found {len(found_urls)} URLs to process")
-                        downloaded_count = 0
+                        current_downloads = 0
+                        required_downloads = 5
                         
                         for url in found_urls:
                             if self.url_manager.is_processed(url):
@@ -160,11 +163,11 @@ class ScribdScraper:
                             )
                             
                             if success:
-                                downloaded_count += 1
+                                current_downloads += 1
                                 # Don't record download here since it's already done in download_manager
                                 
                                 # Check if we've reached 2 downloads
-                                if downloaded_count >= 2:
+                                if current_downloads >= required_downloads:
                                     self.progress_tracker.mark_subcategory_complete(category, subcategory)
                                     break
                             
@@ -172,6 +175,7 @@ class ScribdScraper:
                     
                     # Move to next search item
                     current_search = self.search_mechanism.move_to_next()
+                    time.sleep(3)
                     
                     # Check category completion
                     if current_search and current_search.get('is_last_subcategory'):

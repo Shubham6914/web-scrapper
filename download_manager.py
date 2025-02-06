@@ -20,13 +20,14 @@ import datetime
 
 
 class DownloadManager:
-    def __init__(self, driver, config_manager, name_handler, progress_tracker, url_manager, report_manager):
+    def __init__(self, driver, config_manager, name_handler, progress_tracker, url_manager, report_manager,search_executor):
         self.driver = driver
         self.config_manager = config_manager
         self.name_handler = name_handler
         self.progress_tracker = progress_tracker
         self.url_manager = url_manager
         self.report_manager = report_manager
+        self.search_executor = search_executor
         self.wait = WebDriverWait(self.driver, 10)
 
     
@@ -136,20 +137,6 @@ class DownloadManager:
                     subcategory=subcategory,
                     count=1  # Record single download
                 )
-                
-                current_downloads = self.progress_tracker.get_subcategory_downloads(category, subcategory)
-                self.config_manager.log_message(f"Current downloads for {subcategory}: {current_downloads}")
-                
-                # Check if we've reached 2 downloads
-                if current_downloads >= 2:
-                    self.config_manager.log_message(f"Subcategory {subcategory} has reached required downloads")
-                    self.progress_tracker.mark_subcategory_complete(category, subcategory)
-                    
-                    # Check if category is complete
-                    if self.progress_tracker.is_category_complete(category):
-                        self.config_manager.log_message(f"Category {category} completed")
-                        self.config_manager.mark_category_complete(category)
-                
                 self.config_manager.log_message("Download process completed successfully")
                 return True
             
