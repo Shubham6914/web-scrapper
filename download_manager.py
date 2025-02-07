@@ -155,12 +155,50 @@ class DownloadManager:
     def get_document_title(self):
         """Extract and clean document title"""
         try:
-            title_element = self.driver.find_element(By.CSS_SELECTOR, '[data-e2e="doc_page_title"]')
-            document_title = title_element.text
-            document_title = ''.join(c for c in document_title if c.isalnum() or c in ' -')
-            document_title = ' '.join(document_title.split())
-            self.config_manager.log_message(f"Found document title: {document_title}")
-            return document_title
+            # Wait for the title element to be present and visible
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, '[data-e2e="doc_page_title"]'))
+            )
+            
+            # Try multiple selectors
+            selectors = [
+                '[data-e2e="doc_page_title"]',
+                '[data-e2e="doc_page_title"] p',
+                '.doc_page_title',
+                'h1[data-e2e="doc_page_title"]',
+                'div[data-e2e="doc_page_title"] p'
+            ]
+            
+            document_title = None
+            for selector in selectors:
+                try:
+                    title_element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    document_title = title_element.text.strip()
+                    if document_title:
+                        break
+                except:
+                    continue
+            
+            # If still no title, try JavaScript
+            if not document_title:
+                document_title = self.driver.execute_script(
+                    'return document.querySelector("[data-e2e=\'doc_page_title\']").textContent;'
+                )
+            
+            # If still no title, wait a bit and try again
+            if not document_title:
+                time.sleep(2)
+                title_element = self.driver.find_element(By.CSS_SELECTOR, '[data-e2e="doc_page_title"]')
+                document_title = title_element.text
+            
+            if document_title:
+                document_title = ''.join(c for c in document_title if c.isalnum() or c in ' -')
+                document_title = ' '.join(document_title.split())
+                self.config_manager.log_message(f"Found document title: {document_title}")
+                return document_title
+            else:
+                raise Exception("Title text is empty")
+                
         except Exception as e:
             self.config_manager.log_message(f"Could not find document title: {str(e)}")
             return f'document_{int(time.time())}'

@@ -150,7 +150,7 @@ class ScribdScraper:
                     if search_success and found_urls:
                         self.config_manager.log_message(f"Found {len(found_urls)} URLs to process")
                         current_downloads = 0
-                        required_downloads = 5
+                        required_downloads = 800
                         
                         for url in found_urls:
                             if self.url_manager.is_processed(url):

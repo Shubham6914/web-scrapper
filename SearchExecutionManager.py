@@ -26,7 +26,7 @@ class SearchExecutionManager:
             'min_results': 2,
             'max_results': 5,
             'search_delay': 3,
-            'max_page_limit': 2  # New: Maximum pages to process
+            'max_page_limit': 25  # New: Maximum pages to process
         }
 
     def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
@@ -163,9 +163,7 @@ class SearchExecutionManager:
                         'www.scribd.com/document/' in url and 
                         not self.url_manager.is_processed(url)):
                         new_urls.append(url)
-                        
-                        # if len(new_urls) >= self.search_config['max_results']:
-                        #     break
+
                             
                 except Exception as e:
                     print(f"Error getting URL: {str(e)}")
