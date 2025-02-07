@@ -1,32 +1,61 @@
+import traceback
+
+
+# In search_generator.py
 class SearchMechanism:
-    def __init__(self, insurance_categories):
+    def __init__(self, insurance_categories, config_manager=None):
         """
         Initialize search mechanism with insurance categories
         Args:
             insurance_categories (dict): Dictionary of categories and their subcategories
+            config_manager: ConfigManager instance for logging
         """
         self.categories = insurance_categories
         self.category_list = list(insurance_categories.keys())
         self.current_category_index = 0
         self.current_subcategory_index = 0
         self.search_completed = False
+        self.current_page = 1
+        self.max_pages = 2  # Add this line
+        self.config_manager = config_manager
         
-    def initialize_search(self, resume_point=None):
-        """
-        Initialize or reset search position with resume capability
-        Args:
-            resume_point: Dictionary containing resume information
-        """
-        if resume_point:
-            self.current_category_index = resume_point['category_index']
-            self.current_subcategory_index = resume_point['subcategory_index']
-            self.search_completed = False
+    def log_message(self, message):
+        """Safe logging method"""
+        if self.config_manager:
+            self.config_manager.log_message(message)
         else:
-            self.current_category_index = 0
-            self.current_subcategory_index = 0
-            self.search_completed = False
+            print(message)
+
+    def initialize_search(self, resume_point=None):
+        """Initialize or reset search position with resume capability"""
+        try:
+            self.log_message("=== Initializing Search ===")
             
-        return self.get_current_search_item()
+            if resume_point:
+                self.log_message(f"Resuming from previous point: {resume_point}")
+                self.current_category_index = resume_point['category_index']
+                self.current_subcategory_index = resume_point['subcategory_index']
+                self.current_page = resume_point.get('current_page', 1)
+                self.search_completed = False
+            else:
+                self.log_message("Starting fresh search")
+                self.current_category_index = 0
+                self.current_subcategory_index = 0
+                self.current_page = 1
+                self.search_completed = False
+
+            # Get current search item
+            current_item = self.get_current_search_item()
+            if current_item:
+                self.log_message(f"Search initialized with: {current_item}")
+            else:
+                self.log_message("No search items available")
+                
+            return current_item
+            
+        except Exception as e:
+            self.log_message(f"Error initializing search: {str(e)}")
+            return None
     
     def get_current_search_item(self):
         """
@@ -47,7 +76,9 @@ class SearchMechanism:
             'is_last_subcategory': self.is_last_subcategory(),
             'is_last_category': self.is_last_category(),
             'category_index': self.current_category_index,
-            'subcategory_index': self.current_subcategory_index
+            'subcategory_index': self.current_subcategory_index,
+            'current_page': self.current_page,  # Add this line
+            'max_pages': self.max_pages  # Add this line
         }
     
     
@@ -107,7 +138,7 @@ class SearchMechanism:
     
     def get_search_progress(self):
         """
-        Get current search progress information
+        Get current search progress information with pagination
         Returns:
             dict: Progress information
         """
@@ -123,13 +154,43 @@ class SearchMechanism:
         return {
             'current_position': current_item,
             'current_search_term': current_item['search_term'] if current_item else None,
+            'current_page': self.current_page,
+            'max_pages': getattr(self, 'max_pages', 5),  # Safe access to max_pages
             'processed_categories': processed_categories,
             'total_categories': total_categories,
             'processed_subcategories': processed_subcategories,
             'total_subcategories': total_subcategories,
-            'completion_percentage': (processed_subcategories / total_subcategories) * 100
+            'completion_percentage': (processed_subcategories / total_subcategories) * 100 if total_subcategories > 0 else 0
         }
-    
+    def reset_pagination(self):
+        """
+        Reset pagination for new search
+        """
+        self.current_page = 1
+
+    def next_page(self):
+        """
+        Move to next page if available
+        Returns:
+            bool: True if moved to next page, False if at max pages
+        """
+        if self.current_page < getattr(self, 'max_pages', 5):  # Safe access to max_pages
+            self.current_page += 1
+            self.log_message(f"Moving to page {self.current_page}")
+            return True
+        self.log_message("Reached maximum page limit")
+        return False
+    def get_page_status(self):
+        """
+        Get current page status
+        Returns:
+            dict: Current page information
+        """
+        return {
+            'current_page': self.current_page,
+            'max_pages': getattr(self, 'max_pages', 5),
+            'has_next_page': self.current_page < getattr(self, 'max_pages', 5)
+        }
     def set_position(self, category_index, subcategory_index):
         """
         Set search position to specific indices

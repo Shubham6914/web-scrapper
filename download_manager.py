@@ -53,39 +53,49 @@ class DownloadManager:
                 # Method 1: Using Chrome options
                 if hasattr(self.driver, 'options'):
                     prefs = {
-                        "download.default_directory": current_dir,
-                        "download.prompt_for_download": False,
-                        "download.directory_upgrade": True,
-                        "safebrowsing.enabled": True,
-                        "plugins.always_open_pdf_externally": True
-                    }
+                    "download.default_directory": current_dir,
+                    "download.prompt_for_download": False,
+                    "download.directory_upgrade": True,
+                    "safebrowsing.enabled": True,
+                    "plugins.always_open_pdf_externally": True,
+                    "download.open_pdf_in_system_reader": False,
+                    "profile.default_content_settings.popups": 0,
+                    "profile.default_content_setting_values.automatic_downloads": 1,
+                    "download.manager_alert_on_dlc": False,
+                    "download.show_dangerous_download_warnings": False
+                }
                     self.driver.options.add_experimental_option("prefs", prefs)
                 
                 # Method 2: Using JavaScript
                 js_script = f"""
                     const prefs = {{
-                        "download.default_directory": "{current_dir}",
-                        "download.prompt_for_download": false,
-                        "download.directory_upgrade": true,
-                        "safebrowsing.enabled": true,
-                        "plugins.always_open_pdf_externally": true
-                    }};
-                    Object.keys(prefs).forEach(key => {{
-                        if (chrome.preferences) {{
-                            chrome.preferences.setPref(key, prefs[key]);
-                        }}
-                    }});
+                    "download.default_directory": "{current_dir}",
+                    "download.prompt_for_download": false,
+                    "download.directory_upgrade": true,
+                    "safebrowsing.enabled": true,
+                    "plugins.always_open_pdf_externally": true,
+                    "download.open_pdf_in_system_reader": false,
+                    "profile.default_content_settings.popups": 0,
+                    "profile.default_content_setting_values.automatic_downloads": 1,
+                    "download.manager_alert_on_dlc": false,
+                    "download.show_dangerous_download_warnings": false
+                }};
+                Object.keys(prefs).forEach(key => {{
+                    if (chrome.preferences) {{
+                        chrome.preferences.setPref(key, prefs[key]);
+                    }}
+                }});
                 """
                 self.driver.execute_script(js_script)
                 
                 # Method 3: Using CDP command if available
-                if hasattr(self.driver, 'execute_cdp_cmd'):
-                    self.driver.execute_cdp_cmd('Page.setDownloadBehavior', {
-                        'behavior': 'allow',
-                        'downloadPath': current_dir
-                    })
+                self.driver.execute_cdp_cmd('Page.setDownloadBehavior', {
+                    'behavior': 'allow',
+                    'downloadPath': current_dir,
+                    'eventsEnabled': True
+                })
                 
-                self.config_manager.log_message("Download preferences updated")
+                self.config_manager.log_message("Enhanced Download preferences updated")
             except Exception as e:
                 self.config_manager.log_message(f"Warning: Could not set download preferences: {str(e)}")
             
@@ -279,6 +289,7 @@ class DownloadManager:
 
             # Click download button
             modal_download_button.click()
+            time.sleep(2)
             self.config_manager.log_message("Download initiated")
             
             return cleaned_title, download_url

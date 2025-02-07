@@ -106,7 +106,9 @@ class ProgressTracker:
         self.save_progress()
 
     def mark_subcategory_complete(self, category: str, subcategory: str):
-        """Mark a subcategory as completed"""
+        """
+        Mark a subcategory as completed (modified to handle pagination-based completion)
+        """
         try:
             if category not in self.progress_data['completed']['subcategories']:
                 self.progress_data['completed']['subcategories'][category] = []
@@ -114,11 +116,12 @@ class ProgressTracker:
             if subcategory not in self.progress_data['completed']['subcategories'][category]:
                 self.progress_data['completed']['subcategories'][category].append(subcategory)
                 self.progress_data['statistics']['completed_subcategories'] += 1
-                self.save_progress()
                 self.log_message(f"Marked subcategory {subcategory} as complete after processing all available URLs")
                 
                 # Check category completion
                 self.check_category_completion(category)
+                
+            self.save_progress()
         except Exception as e:
             self.log_message(f"Error marking subcategory complete: {str(e)}")
             
@@ -150,12 +153,19 @@ class ProgressTracker:
         return self.progress_data['current_position']
 
     def update_search_progress(self, category: str, subcategory: str, success: bool):
-        """Update progress for a search attempt"""
-        if success:
-            self.progress_data['statistics']['successful_searches'] += 1
-        else:
-            self.progress_data['statistics']['failed_searches'] += 1
-        self.save_progress()
+        """
+        Update progress for a search attempt (modified to include page information)
+        """
+        try:
+            if success:
+                self.progress_data['statistics']['successful_searches'] += 1
+            else:
+                self.progress_data['statistics']['failed_searches'] += 1
+            
+            self.save_progress()
+            self.log_message(f"Updated search progress for {category}/{subcategory} - Success: {success}")
+        except Exception as e:
+            self.log_message(f"Error updating search progress: {str(e)}")
 
     def get_progress_summary(self) -> Dict[str, Any]:
         """Get summary of current progress"""
@@ -166,7 +176,9 @@ class ProgressTracker:
             'total_categories': self.progress_data['statistics']['total_categories']
         }
     def record_download(self, category: str, subcategory: str, count: int = 1):
-        """Record successful download"""
+        """
+        Record successful download (modified to handle unlimited downloads)
+        """
         try:
             if category not in self.progress_data['completed']['downloads']:
                 self.progress_data['completed']['downloads'][category] = {}
@@ -175,6 +187,8 @@ class ProgressTracker:
                 
             self.progress_data['completed']['downloads'][category][subcategory] += count
             self.progress_data['statistics']['total_downloads'] += count
+            
+            self.log_message(f"Recorded {count} download(s) for {category}/{subcategory}")
             self.save_progress()
             
         except Exception as e:
@@ -225,28 +239,28 @@ class ProgressTracker:
         
     def is_subcategory_complete(self, category: str, subcategory: str) -> bool:
         """
-        Check if subcategory is marked as complete in progress data
-        Args:
-            category: Category name
-            subcategory: Subcategory name
-        Returns:
-            bool: True if subcategory is marked complete, False otherwise
+        Check if subcategory is complete (modified to remove download count requirement)
         """
         try:
-            # Check if the subcategory is marked as complete in progress data
-            completed_subcategories = self.progress_data['completed'].get(category, {}).get('subcategories', [])
-            return subcategory in completed_subcategories
+            # Check if subcategory is in completed list
+            completed_subcats = self.progress_data['completed']['subcategories'].get(category, [])
+            return subcategory in completed_subcats
         except Exception as e:
             self.log_message(f"Error checking subcategory completion: {str(e)}")
             return False
         
+        
     def get_subcategory_downloads(self, category: str, subcategory: str) -> int:
-        """Get current download count for a subcategory"""
+        """
+        Get current download count for a subcategory (kept for tracking purposes)
+        """
         try:
             return self.progress_data['completed']['downloads'].get(category, {}).get(subcategory, 0)
         except Exception as e:
             self.log_message(f"Error getting subcategory downloads: {str(e)}")
             return 0
+        
+
     def get_daily_count(self) -> int:
         """Get today's download count"""
         try:

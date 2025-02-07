@@ -1,16 +1,3 @@
-# config_manager.py
-"""This ConfigManager class handles:
-
-Directory setup and management
-Configuration loading/saving
-Chrome options setup
-Logging functionality
-"""
-
-from selenium.webdriver.chrome.options import Options
-import os
-import json
-import datetime
 """This ConfigManager class handles:
 Directory setup and management with category-subcategory structure
 Configuration loading/saving
@@ -32,6 +19,24 @@ class ConfigManager:
         self.log_dir = os.path.join(self.app_dir, 'logs')
         self.config_file = os.path.join(self.app_dir, 'config.json')
         
+         # Define default configurations first
+        self.default_config = {
+            'current_category': None,
+            'current_subcategory': None,
+            'completed_categories': [],
+            'completed_subcategories': {},
+            'pagination': {
+                'current_page': 1,
+                'last_processed_page': 1,
+                'urls_processed': 0
+            }
+        }
+        
+        # Add pagination configuration
+        self.pagination_config = {
+            'max_pages': 5,
+            'results_per_page': 20  # Default value
+        }
         # Create base directories silently first
         self._create_base_directories_silent()
         
@@ -47,7 +52,7 @@ class ConfigManager:
         # Track current category and subcategory
         self.current_category = None
         self.current_subcategory = None
-        self.current_download_dir = None
+        self.current_download_dir = None        
         
         # Log initialization
         self.log_message("ConfigManager initialized successfully")
@@ -114,24 +119,19 @@ class ConfigManager:
         return self.current_download_dir
 
     def load_config(self):
-        """Load configuration from file"""
-        default_config = {
-            'current_category': None,
-            'current_subcategory': None,
-            'completed_categories': [],
-            'completed_subcategories': {},
-            'lastPage': 1,
-            'lastIndex': 0
-        }
-        
+        """Load configuration from file with pagination support"""
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r') as f:
-                    return json.load(f)
+                    config = json.load(f)
+                    # Ensure pagination configuration exists
+                    if 'pagination' not in config:
+                        config['pagination'] = self.default_config['pagination']
+                    return config
             except Exception as e:
                 self.log_message(f"Error loading config: {str(e)}")
-                return default_config
-        return default_config
+                return self.default_config.copy()  # Return a copy of default config
+        return self.default_config.copy()  # Return a copy of default config
 
     def save_config(self):
         """Save current configuration to file"""
@@ -240,13 +240,19 @@ class ConfigManager:
         self.save_config()
 
     def mark_subcategory_complete(self, category, subcategory):
-        """Mark a subcategory as completed"""
-        if category not in self.config['completed_subcategories']:
-            self.config['completed_subcategories'][category] = []
-        
-        if subcategory not in self.config['completed_subcategories'][category]:
-            self.config['completed_subcategories'][category].append(subcategory)
-            self.save_config()
+        """Mark a subcategory as completed with pagination reset"""
+        try:
+            if category not in self.config['completed_subcategories']:
+                self.config['completed_subcategories'][category] = []
+            
+            if subcategory not in self.config['completed_subcategories'][category]:
+                self.config['completed_subcategories'][category].append(subcategory)
+                # Reset pagination for next subcategory
+                self.reset_pagination(category, subcategory)
+                self.save_config()
+                self.log_message(f"Marked {category}/{subcategory} as complete")
+        except Exception as e:
+            self.log_message(f"Error marking subcategory complete: {str(e)}")
 
     def mark_category_complete(self, category):
         """Mark a category as completed"""
