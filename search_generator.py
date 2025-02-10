@@ -16,7 +16,7 @@ class SearchMechanism:
         self.current_subcategory_index = 0
         self.search_completed = False
         self.current_page = 1
-        self.max_pages = 25  # Add this line
+        self.max_pages = 25 # Add this line
         self.config_manager = config_manager
         
     def log_message(self, message):

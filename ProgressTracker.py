@@ -1,6 +1,7 @@
 import json
 import datetime
 import os
+import traceback
 from typing import Dict, Any
 
 class ProgressTracker:
@@ -21,12 +22,15 @@ class ProgressTracker:
                 'category_index': 0,
                 'subcategory_index': 0,
                 'category': None,
-                'subcategory': None
+                'subcategory': None,
+                'current_page': 1, 
+                'last_processed_page': 0
             },
             'completed': {
                 'categories': [],
                 'subcategories': {},  # Format: {'category': ['subcategory1', 'subcategory2']}
-                'downloads': {}  # Format: {'category': {'subcategory': count}}
+                'downloads': {},  # Format: {'category': {'subcategory': count}}
+                'pages': {}  # Add this: Format: {'category': {'subcategory': last_completed_page}}
             },
             'statistics': {
                 'total_categories': 0,
@@ -152,6 +156,64 @@ class ProgressTracker:
         """Get current position in search process"""
         return self.progress_data['current_position']
 
+
+    def update_page_progress(self, category: str, subcategory: str, page: int):
+        """Update the last processed page for a subcategory"""
+        try:
+            # Ensure pages structure exists
+            if 'pages' not in self.progress_data['completed']:
+                self.progress_data['completed']['pages'] = {}
+                
+            if category not in self.progress_data['completed']['pages']:
+                self.progress_data['completed']['pages'][category] = {}
+            
+            # Update page information
+            self.progress_data['completed']['pages'][category][subcategory] = page
+            self.progress_data['current_position']['current_page'] = page
+            self.progress_data['current_position']['last_processed_page'] = page - 1  # Last completed page
+            
+            # Log the update
+            self.log_message(
+                f"Updated page progress for {category}/{subcategory}:"
+                f"\n - Current page: {page}"
+                f"\n - Last processed page: {page - 1}"
+            )
+            
+            # Save progress
+            self.save_progress()
+            
+        except Exception as e:
+            self.log_message(f"Error updating page progress: {str(e)}")
+            self.log_message(traceback.format_exc())
+            
+    def get_page_progress(self, category: str, subcategory: str) -> dict:
+        """Get page progress for a subcategory"""
+        try:
+            pages_info = self.progress_data['completed'].get('pages', {})
+            last_page = pages_info.get(category, {}).get(subcategory, 0)
+            
+            return {
+                'last_processed_page': last_page,
+                'next_page': last_page + 1,
+                'category': category,
+                'subcategory': subcategory
+            }
+        except Exception as e:
+            self.log_message(f"Error getting page progress: {str(e)}")
+            return {
+                'last_processed_page': 0,
+                'next_page': 1,
+                'category': category,
+                'subcategory': subcategory
+            }
+    def get_last_processed_page(self, category: str, subcategory: str) -> int:
+        """Get the last processed page for a subcategory"""
+        try:
+            return self.progress_data['completed']['pages'].get(category, {}).get(subcategory, 0)
+        except Exception as e:
+            self.log_message(f"Error getting last processed page: {str(e)}")
+            return 0
+        
     def update_search_progress(self, category: str, subcategory: str, success: bool):
         """
         Update progress for a search attempt (modified to include page information)
@@ -224,14 +286,23 @@ class ProgressTracker:
         try:
             current_pos = self.progress_data['current_position']
             last_proc = self.progress_data['last_processed']
+            category = current_pos['category'] or last_proc['category']
+            subcategory = current_pos['subcategory'] or last_proc['subcategory']
+            
+            # Get last processed page
+            page_progress = self.get_page_progress(category, subcategory)
+        
             
             return {
-                'category_index': current_pos['category_index'],
-                'subcategory_index': current_pos['subcategory_index'],
-                'category': current_pos['category'] or last_proc['category'],
-                'subcategory': current_pos['subcategory'] or last_proc['subcategory'],
-                'downloads': self.progress_data['completed']['downloads']
-            }
+            'category_index': current_pos['category_index'],
+            'subcategory_index': current_pos['subcategory_index'],
+            'category': category,
+            'subcategory': subcategory,
+            'downloads': self.progress_data['completed']['downloads'],
+            'current_page': page_progress['next_page'],
+            'last_processed_page': page_progress['last_processed_page'],
+            'total_downloads': self.get_subcategory_downloads(category, subcategory)
+        }
             
         except Exception as e:
             self.log_message(f"Error getting resume point: {str(e)}")
@@ -321,3 +392,18 @@ class ProgressTracker:
             error_message = f"Error printing stats: {str(e)}"
             self.log_message(error_message)
             return error_message
+        
+    def log_subcategory_progress(self, category: str, subcategory: str):
+        """Log detailed progress for a subcategory"""
+        try:
+            status = self.get_subcategory_status(category, subcategory)
+            progress_msg = f"""
+            === Progress for {category}/{subcategory} ===
+            Downloads: {status['downloads']}
+            Last Processed Page: {status['last_page']}
+            Status: {'Complete' if status['is_complete'] else 'In Progress'}
+            ===============================
+            """
+            self.log_message(progress_msg)
+        except Exception as e:
+            self.log_message(f"Error logging subcategory progress: {str(e)}")

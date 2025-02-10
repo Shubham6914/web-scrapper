@@ -46,8 +46,8 @@ class ScribdScraper:
                 log_file=self.config_manager.log_file
             )
             self.report_manager = DownloadReportManager(
-                excel_file='demo_reports.xlsx',
-                spreadsheet_id='1h92zhz016TK3dFEqLg0VPeZ0IF_LpYJPaBSBJL7QR7'
+            excel_file='download_reports.xlsx',
+            spreadsheet_id='1sbKp5Xa_NPd5Bp6MbaS_eaLlgLzsdX_t3jcms3zgXQ4'
             )
                     
             # Setup WebDriver
@@ -109,37 +109,33 @@ class ScribdScraper:
     def run(self):
         """Main execution method"""
         try:
-            # Start browser session
+            # Initialize browser session and login
             self.driver.get('https://www.scribd.com')
             self.config_manager.log_message("Started browser session")
 
-            # Perform login
             if not self.auth_manager.ensure_login():
                 self.config_manager.log_message("Failed to login, stopping execution")
                 return
 
-            # Get resume point with logging
+            # Initialize search process
             self.config_manager.log_message("Getting resume point...")
             resume_point = self.progress_tracker.get_resume_point()
             self.config_manager.log_message(f"Resume point: {resume_point}")
 
-            # Initialize search with logging
             self.config_manager.log_message("Initializing search mechanism...")
             current_search = self.search_mechanism.initialize_search(resume_point)
             self.config_manager.log_message(f"Initial search state: {current_search}")
             
+            # Main processing loop
             while current_search:
                 try:
                     category = current_search['category']
                     subcategory = current_search['subcategory']
                     search_term = current_search['search_term']
                     
-                    self.config_manager.log_message(f"\n=== Starting New Search Iteration ===")
-                    self.config_manager.log_message(f"Category: {category}")
-                    self.config_manager.log_message(f"Subcategory: {subcategory}")
-                    self.config_manager.log_message(f"Search Term: {search_term}")
+                    self.config_manager.log_message(f"\n=== Processing {category}/{subcategory} ===")
                     
-                    # Update progress tracker position
+                    # Update position and check completion
                     self.progress_tracker.update_position(
                         category=category,
                         subcategory=subcategory,
@@ -147,9 +143,8 @@ class ScribdScraper:
                         subcategory_index=current_search['subcategory_index']
                     )
                     
-                    # Check completion status
                     if self.progress_tracker.is_subcategory_complete(category, subcategory):
-                        self.config_manager.log_message(f"Subcategory {subcategory} already completed, moving to next...")
+                        self.config_manager.log_message(f"Subcategory {subcategory} already completed")
                         current_search = self.search_mechanism.move_to_next()
                         continue
                     
@@ -157,47 +152,34 @@ class ScribdScraper:
                     self.config_manager.setup_category_directory(category)
                     current_dir = self.config_manager.setup_subcategory_directory(category, subcategory)
                     
-                    # Process each page
-                    current_downloads = 0
-                    required_downloads = 2
+                    # Initialize processing parameters
+                    last_page = resume_point.get('last_processed_page', 0)
+                    start_page = last_page + 1
+                    current_downloads = self.progress_tracker.get_subcategory_downloads(category, subcategory)
+                    required_downloads = 800
                     max_pages = 25
+                    
+                    self.config_manager.log_message(f"Starting from page {start_page}, current downloads: {current_downloads}")
 
-                    for page in range(1, max_pages + 1):
-                        self.config_manager.log_message(f"\n=== Processing Page {page} ===")
-                        
-                        # Construct search URL
+                    # Process pages
+                    for page in range(start_page, max_pages + 1):
+                        # Construct and navigate to search URL
                         search_url = f'https://www.scribd.com/search?query={search_term}&page={page}'
                         self.driver.get(search_url)
-                        time.sleep(3)  # Wait for page load
+                        time.sleep(3)
                         
-                        # Check for no results
-                        try:
-                            no_results = self.driver.find_element(By.XPATH, "//div[contains(text(), 'No results for')]")
-                            if no_results:
-                                self.config_manager.log_message(f"No results found on page {page}")
-                                break
-                        except:
-                            pass
-                        
-                        # Collect URLs from current page
+                        # Collect and process URLs
                         page_urls = self.search_executor.collect_document_urls(category, subcategory)
                         
                         if page_urls:
                             self.config_manager.log_message(f"Found {len(page_urls)} URLs on page {page}")
                             
-                            # Process all URLs from current page
+                            # Process URLs
                             for url in page_urls:
                                 if self.url_manager.is_processed(url):
-                                    self.config_manager.log_message(f"URL already processed: {url}")
                                     continue
                                 
-                                success = self.download_manager.download_document(
-                                    url,
-                                    category,
-                                    subcategory
-                                )
-                                
-                                if success:
+                                if self.download_manager.download_document(url, category, subcategory):
                                     current_downloads += 1
                                     self.config_manager.log_message(
                                         f"Download progress: {current_downloads}/{required_downloads} "
@@ -205,45 +187,44 @@ class ScribdScraper:
                                     )
                                     
                                     if current_downloads >= required_downloads:
-                                        self.config_manager.log_message(f"Reached required downloads for {subcategory}")
+                                        self.config_manager.log_message(f"Completed {subcategory}")
                                         self.progress_tracker.mark_subcategory_complete(category, subcategory)
                                         break
                                 
                                 time.sleep(2)
                             
-                            # Check if we've reached required downloads
+                            # Update progress
+                            self.progress_tracker.update_page_progress(category, subcategory, page)
+                            
+                            # Check if subcategory is complete
                             if current_downloads >= required_downloads:
                                 break
                         else:
                             self.config_manager.log_message(f"No URLs found on page {page}")
                             break
                         
-                        # Add delay before next page
                         time.sleep(3)
                     
                     # Move to next subcategory
-                    self.config_manager.log_message("Moving to next search item...")
                     current_search = self.search_mechanism.move_to_next()
-                    self.config_manager.log_message(f"Next search state: {current_search}")
                     
+                    # Check category completion
                     if current_search and current_search.get('is_last_subcategory'):
                         if self.progress_tracker.is_category_complete(category):
                             self.progress_tracker.check_category_completion(category)
                             self.config_manager.log_message(f"Completed category: {category}")
                     
-                    time.sleep(3)
-                    
                 except Exception as e:
-                    self.config_manager.log_message(f"Error processing search: {str(e)}")
+                    self.config_manager.log_message(f"Error processing {category}/{subcategory}: {str(e)}")
                     self.config_manager.log_message(traceback.format_exc())
                     current_search = self.search_mechanism.move_to_next()
-                    continue
 
-            self.config_manager.log_message("Search loop completed, printing final stats...")
+            # Finish execution
+            self.config_manager.log_message("Processing completed")
             self.print_final_stats()
 
         except Exception as e:
-            self.config_manager.log_message(f"Critical error in main execution: {str(e)}")
+            self.config_manager.log_message(f"Critical error: {str(e)}")
             self.config_manager.log_message(traceback.format_exc())
         finally:
             self.cleanup()

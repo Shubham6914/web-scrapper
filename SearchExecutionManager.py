@@ -28,7 +28,7 @@ class SearchExecutionManager:
         self.search_config = {
             'wait_time': 10,
             'search_delay': 3,
-            'max_page_limit': 5  # New: Maximum pages to process
+            'max_page_limit': 25  # New: Maximum pages to process
         }
         
         # New: Pagination tracking
@@ -46,13 +46,25 @@ class SearchExecutionManager:
         """
         self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
         
-        for attempt in range(max_attempts):
-            try:
-                self.config_manager.log_message(f"Attempt {attempt + 1} of {max_attempts}")
-                
-                # Process pages using direct URL pagination
-                for page in range(1, self.search_config['max_page_limit'] + 1):
-                    self.config_manager.log_message(f"\nProcessing page {page}")
+        # Get last processed page
+        resume_point = self.progress_tracker.get_resume_point()
+        start_page = resume_point.get('current_page', 1)
+        last_processed_page = resume_point.get('last_processed_page', 0)
+        self.config_manager.log_message(f"Resuming from page {start_page} (Last processed: {last_processed_page})")
+    
+        # Check if subcategory is already complete
+        if self.progress_tracker.is_subcategory_complete(category, subcategory):
+            self.config_manager.log_message(f"Subcategory {subcategory} is already complete, moving to next")
+            return True, []
+        # Process pages using direct URL pagination
+        for page in range(start_page, self.search_config['max_page_limit'] + 1):
+            page_success = False
+            page_has_content = False
+            
+            # Try max_attempts times for each page
+            for attempt in range(max_attempts):
+                try:
+                    self.config_manager.log_message(f"\nProcessing page {page} (Attempt {attempt + 1} of {max_attempts})")
                     
                     # Construct search URL with page number
                     search_url = f'https://www.scribd.com/search?query={search_term}&page={page}'
@@ -62,24 +74,31 @@ class SearchExecutionManager:
                     self.driver.get(search_url)
                     time.sleep(self.search_config['search_delay'])
                     
-                    # Check for no results
-                    try:
-                        no_results = self.driver.find_element(By.XPATH, "//div[contains(text(), 'No results for')]")
-                        if no_results:
-                            self.config_manager.log_message(f"No results found on page {page}, ending search.")
-                            return False, []
-                    except:
-                        pass
+                    # Validate results
+                    has_results, new_results_count = self.validate_results(category, subcategory, page)
+                    
+                    if not has_results:
+                        if attempt == max_attempts - 1:
+                            self.config_manager.log_message(f"No valid results found on page {page} after all attempts")
+                            break
+                        continue
+                    
+                    page_has_content = True
                     
                     # Collect URLs from current page
                     page_urls = self.collect_document_urls(category, subcategory)
                     
                     if page_urls:
                         self.config_manager.log_message(f"Found {len(page_urls)} URLs on page {page}")
-                        
-                        # Process all URLs from current page before moving to next page
+                        page_has_content = True
+                        # Process all URLs from current page
                         self.config_manager.log_message(f"Processing downloads for page {page}")
                         for url in page_urls:
+                            # Check if subcategory became complete during processing
+                            if self.progress_tracker.is_subcategory_complete(category, subcategory):
+                                self.config_manager.log_message(f"Subcategory {subcategory} completed during processing")
+                                return True, []
+                            
                             if self.url_manager.is_processed(url):
                                 self.config_manager.log_message(f"URL already processed: {url}")
                                 continue
@@ -99,23 +118,51 @@ class SearchExecutionManager:
                             time.sleep(2)  # Delay between downloads
                         
                         self.config_manager.log_message(f"Completed processing all URLs from page {page}")
+                        
+                        # Update progress tracker with completed page
+                        self.progress_tracker.update_page_progress(category, subcategory, page)
+                        page_success = True
+                        # Check if subcategory is complete after page processing
+                        if self.progress_tracker.is_subcategory_complete(category, subcategory):
+                            self.config_manager.log_message(f"Subcategory {subcategory} completed after page {page}")
+                            return True, []
+                            
+                        break  # Successfully processed this page, move to next
                     else:
-                        self.config_manager.log_message(f"No URLs found on page {page}, ending search.")
-                        break
-                    
-                    # Add delay before moving to next page
-                    if page < self.search_config['max_page_limit']:
-                        time.sleep(self.search_config['search_delay'])
+                        self.config_manager.log_message(f"No URLs found on page {page}, attempt {attempt + 1}")
+                        if attempt == max_attempts - 1:
+                            self.config_manager.log_message("Max attempts reached with no URLs, moving to next page")
+                            break
+                        continue
+                        
+                except Exception as e:
+                    self.config_manager.log_message(f"Error in page {page}, attempt {attempt + 1}: {str(e)}")
+                    if attempt < max_attempts - 1:
+                        self.config_manager.log_message("Retrying after error...")
+                        time.sleep(5)
+                    else:
+                        self.config_manager.log_message("Max attempts reached after error, moving to next page")
+            
+            # If page had no content after all attempts
+            if not page_has_content:
+                self.config_manager.log_message(f"No content found on page {page} after {max_attempts} attempts")
+                if page > start_page:  # If we've already processed at least one page
+                    self.config_manager.log_message("Ending search as no more content available")
+                    break
                 
-                # Successfully completed all pages
-                return True, []
-                
-            except Exception as e:
-                self.config_manager.log_message(f"Error in search attempt {attempt + 1}: {str(e)}")
-                if attempt < max_attempts - 1:
-                    time.sleep(5)
-        
-        return False, []
+            # Add delay before moving to next page
+            if page < self.search_config['max_page_limit'] and page_success:
+                time.sleep(self.search_config['search_delay'])
+            
+            # If multiple consecutive pages fail, end search
+            if not page_success and page > start_page + 2:
+                self.config_manager.log_message("Multiple pages with no results, ending search")
+                break
+        # Check final completion status
+        if self.progress_tracker.is_subcategory_complete(category, subcategory):
+            self.config_manager.log_message(f"Subcategory {subcategory} completed")
+            return True, []    
+        return True, []  # Return success if we've processed pages
     def execute_single_search(self, category, subcategory, search_term, is_pagination=False):
         """
         Execute single search attempt with pagination support
@@ -240,16 +287,19 @@ class SearchExecutionManager:
             return self.current_page
         
             
-    def validate_results(self, category, subcategory):
+    def validate_results(self, category, subcategory, page_number):
         """
-        Validate search results
+        Validate search results with pagination support
         Args:
             category: Current category
             subcategory: Current subcategory
+            page_number: Current page number
         Returns:
-            bool: Validation status
+            tuple: (validation_status, number_of_new_results)
         """
         try:
+            self.config_manager.log_message(f"Validating results for page {page_number}")
+            
             # Wait for results container
             results_container = WebDriverWait(self.driver, self.search_config['wait_time']).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'div[class*="search-results"]'))
@@ -259,8 +309,8 @@ class SearchExecutionManager:
             try:
                 no_results = self.driver.find_element(By.XPATH, "//div[contains(text(), 'No results for')]")
                 if no_results:
-                    self.config_manager.log_message("No results found for search")
-                    return False
+                    self.config_manager.log_message(f"No results found on page {page_number}")
+                    return False, 0
             except:
                 pass
             
@@ -269,8 +319,8 @@ class SearchExecutionManager:
             
             # Check if any results exist
             if not results:
-                self.config_manager.log_message("No valid results found")
-                return False
+                self.config_manager.log_message(f"No valid results found on page {page_number}")
+                return False, 0
                 
             # Filter out processed URLs
             new_results = [
@@ -278,14 +328,21 @@ class SearchExecutionManager:
                 if not self.url_manager.is_processed(result.get_attribute('href'))
             ]
             
-            # Return True if there are any new results
-            has_new_results = len(new_results) > 0
-            self.config_manager.log_message(f"Found {len(new_results)} new results")
-            return has_new_results
+            # Log results
+            total_results = len(results)
+            new_results_count = len(new_results)
+            self.config_manager.log_message(
+                f"Page {page_number} results:"
+                f"\n - Total results: {total_results}"
+                f"\n - New results: {new_results_count}"
+                f"\n - Already processed: {total_results - new_results_count}"
+            )
+            
+            return new_results_count > 0, new_results_count
                 
         except Exception as e:
-            self.config_manager.log_message(f"Error validating results: {str(e)}")
-            return False
+            self.config_manager.log_message(f"Error validating results on page {page_number}: {str(e)}")
+            return False, 0
 
     def mark_url_processed(self, url, category, subcategory):
         """
