@@ -160,7 +160,7 @@ class ScribdScraper:
                     # Process each page
                     current_downloads = 0
                     required_downloads = 2
-                    max_pages = 5
+                    max_pages = 25
 
                     for page in range(1, max_pages + 1):
                         self.config_manager.log_message(f"\n=== Processing Page {page} ===")

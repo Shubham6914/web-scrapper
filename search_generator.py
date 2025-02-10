@@ -16,7 +16,7 @@ class SearchMechanism:
         self.current_subcategory_index = 0
         self.search_completed = False
         self.current_page = 1
-        self.max_pages = 2  # Add this line
+        self.max_pages = 25  # Add this line
         self.config_manager = config_manager
         
     def log_message(self, message):
@@ -155,7 +155,7 @@ class SearchMechanism:
             'current_position': current_item,
             'current_search_term': current_item['search_term'] if current_item else None,
             'current_page': self.current_page,
-            'max_pages': getattr(self, 'max_pages', 5),  # Safe access to max_pages
+            'max_pages': getattr(self, 'max_pages', 25),  # Safe access to max_pages
             'processed_categories': processed_categories,
             'total_categories': total_categories,
             'processed_subcategories': processed_subcategories,
@@ -174,7 +174,7 @@ class SearchMechanism:
         Returns:
             bool: True if moved to next page, False if at max pages
         """
-        if self.current_page < getattr(self, 'max_pages', 5):  # Safe access to max_pages
+        if self.current_page < getattr(self, 'max_pages', 25):  # Safe access to max_pages
             self.current_page += 1
             self.log_message(f"Moving to page {self.current_page}")
             return True
@@ -188,12 +188,12 @@ class SearchMechanism:
         """
         return {
             'current_page': self.current_page,
-            'max_pages': getattr(self, 'max_pages', 5),
-            'has_next_page': self.current_page < getattr(self, 'max_pages', 5)
+            'max_pages': getattr(self, 'max_pages', 25),
+            'has_next_page': self.current_page < getattr(self, 'max_pages', 25)
         }
     def set_position(self, category_index, subcategory_index):
         """
-        Set search position to specific indices
+        Set search position to specific indices2
         Args:
             category_index (int): Category index
             subcategory_index (int): Subcategory index

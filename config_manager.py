@@ -34,7 +34,7 @@ class ConfigManager:
         
         # Add pagination configuration
         self.pagination_config = {
-            'max_pages': 5,
+            'max_pages': 25,
             'results_per_page': 20  # Default value
         }
         # Create base directories silently first
