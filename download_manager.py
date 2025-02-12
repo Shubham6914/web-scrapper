@@ -113,7 +113,7 @@ class DownloadManager:
                 return False
             
             # Additional wait for download preferences to take effect
-            self.driver.implicitly_wait(2)
+            self.driver.implicitly_wait(4)
             
             # Verify download and rename file
             file_info = self.verify_and_rename_file(cleaned_title, download_url, category, subcategory)
@@ -187,7 +187,7 @@ class DownloadManager:
             
             # If still no title, wait a bit and try again
             if not document_title:
-                time.sleep(2)
+                time.sleep(3)
                 title_element = self.driver.find_element(By.CSS_SELECTOR, '[data-e2e="doc_page_title"]')
                 document_title = title_element.text
             
@@ -218,7 +218,7 @@ class DownloadManager:
             button = elements[0]
             self.driver.execute_script('arguments[0].style.color = "red";', button)
             self.driver.execute_script("arguments[0].scrollIntoView(true);", button)
-            time.sleep(1)
+            time.sleep(2)
             
             try:
                 button.click()
@@ -296,7 +296,7 @@ class DownloadManager:
             valid_extensions = {'.pdf', '.doc', '.docx', '.txt', '.ppt', '.pptx', '.xlsx', '.xls'}
             
             # Initial wait for download
-            time.sleep(5)
+            time.sleep(8)
             
             # Get directories but prioritize correct directory
             current_dir = self.config_manager.get_current_download_dir()
@@ -353,7 +353,7 @@ class DownloadManager:
                     break
                     
                 self.config_manager.log_message("No file found, waiting 5 seconds...")
-                time.sleep(5)
+                time.sleep(8)
             
             if not found_file:
                 self.config_manager.log_message("No matching file found after all attempts")

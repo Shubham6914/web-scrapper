@@ -172,11 +172,11 @@ class ScribdScraper:
                                     self.progress_tracker.mark_subcategory_complete(category, subcategory)
                                     break
                             
-                            time.sleep(2)
+                            time.sleep(4)
                     
                     # Move to next search item
                     current_search = self.search_mechanism.move_to_next()
-                    time.sleep(3)
+                    time.sleep(5)
                     
                     # Check category completion
                     if current_search and current_search.get('is_last_subcategory'):
@@ -184,7 +184,7 @@ class ScribdScraper:
                             self.progress_tracker.check_category_completion(category)
                             self.config_manager.log_message(f"Completed category: {category}")
                     
-                    time.sleep(3)
+                    time.sleep(4)
                     
                 except Exception as e:
                     self.config_manager.log_message(f"Error processing search: {str(e)}")
