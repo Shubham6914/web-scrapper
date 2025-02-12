@@ -14,77 +14,94 @@ class DocumentNameHandler:
         with open(self.log_file, 'a') as f:
             f.write(f'[{timestamp}] {message}\n')
 
-    def get_file_info(self, download_url, original_filename):
-        """Extract and validate file information"""
+    def clean_filename(self, filename):
+        """Clean and format filename"""
         try:
-            # Get extension from URL first
-            url_ext = os.path.splitext(download_url.split('?')[0])[1].lower()
-            # Get extension from original filename as backup
-            original_ext = os.path.splitext(original_filename)[1].lower()
+            # Remove numeric prefix pattern (e.g., "30607540202200-")
+            filename = re.sub(r'^\d+-', '', filename)
             
-            # Use URL extension if valid, otherwise use original extension
-            file_extension = url_ext if url_ext in self.valid_extensions else original_ext
+            # Split on hyphens and clean each part
+            parts = filename.split('-')
+            cleaned_parts = []
             
-            # If no valid extension found, default to .pdf
-            if not file_extension:
-                file_extension = '.pdf'
+            for part in parts:
+                # Remove special characters and extra spaces
+                cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', part)
+                # Convert to title case and strip
+                cleaned = ' '.join(word.capitalize() for word in cleaned.split())
+                cleaned = cleaned.strip()
+                if cleaned:  # Only add non-empty parts
+                    cleaned_parts.append(cleaned)
             
-            self._log_message(f"URL Extension: {url_ext}")
-            self._log_message(f"Original Extension: {original_ext}")
-            self._log_message(f"Selected Extension: {file_extension}")
+            # Join parts with spaces
+            clean_name = ' '.join(cleaned_parts)
             
-            return file_extension
+            # Remove redundant spaces
+            clean_name = re.sub(r'\s+', ' ', clean_name)
             
-        except Exception as e:
-            self._log_message(f"Error in get_file_info: {str(e)}")
-            return '.pdf'
-
-    def generate_unique_name(self, title, original_filename, download_url):
-        """Generates a unique, clean filename while preserving the original structure"""
-        try:
-            # Get the file extension
-            file_extension = self.get_file_info(download_url, original_filename)
-            
-            # Remove any URL parameters or hash from original filename
-            if '#' in original_filename:
-                original_filename = original_filename.split('#')[0]
-            
-            # Get the base name without extension
-            base_name = os.path.splitext(original_filename)[0]
-            
-            # Remove any Scribd ID prefix if present
-            base_name = re.sub(r'^\d+-', '', base_name)
-            
-            # Clean up the name but preserve hyphens
-            cleaned_name = base_name.strip()
-            
-            # Ensure uniqueness
-            final_name = f"{cleaned_name}{file_extension}"
-            if final_name in self.used_names:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                final_name = f"{cleaned_name}_{timestamp}{file_extension}"
-            
-            self.used_names.add(final_name)
-            self._log_message(f"Final filename: {final_name}")
+            # Replace spaces with hyphens for final filename
+            final_name = clean_name.replace(' ', '-')
             
             return final_name
             
         except Exception as e:
-            self._log_message(f"Error generating filename: {str(e)}")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            return f"document_{timestamp}{file_extension}"
+            self._log_message(f"Error in clean_filename: {str(e)}")
+            return filename
 
-    def _clean_name(self, name):
-        """Clean the filename while preserving hyphens"""
+    def generate_unique_name(self, title, original_filename, download_url):
+        """Generates a unique, clean filename"""
         try:
-            # Remove any leading/trailing spaces
-            name = name.strip()
+            # Get the file extension
+            file_extension = self.get_file_info(download_url, original_filename)
             
-            # Remove any invalid filename characters but keep hyphens
-            name = re.sub(r'[<>:"/\\|?*]', '', name)
+            # Clean the original filename
+            base_name = self.clean_filename(original_filename)
             
-            return name
+            # If title is available and different from filename, use it
+            if title and title.strip() != base_name:
+                cleaned_title = self.clean_filename(title)
+                if cleaned_title:
+                    base_name = cleaned_title
+            
+            # Remove any file extension from base_name
+            base_name = os.path.splitext(base_name)[0]
+            
+            # Generate final filename
+            final_name = f"{base_name}{file_extension}"
+            
+            # Ensure uniqueness
+            if final_name in self.used_names:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                final_name = f"{base_name}-{timestamp}{file_extension}"
+            
+            self.used_names.add(final_name)
+            self._log_message(f"Generated filename: {final_name}")
+            
+            return final_name
             
         except Exception as e:
-            self._log_message(f"Error cleaning name: {str(e)}")
-            return name
+            self._log_message(f"Error in generate_unique_name: {str(e)}")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            return f"document-{timestamp}{file_extension}"
+
+    def get_file_info(self, download_url, original_filename):
+        """Extract and validate file extension"""
+        try:
+            # Get extension from original filename first
+            original_ext = os.path.splitext(original_filename)[1].lower()
+            
+            # If original extension is valid, use it
+            if original_ext in self.valid_extensions:
+                return original_ext
+            
+            # Try getting extension from URL
+            url_ext = os.path.splitext(download_url.split('?')[0])[1].lower()
+            if url_ext in self.valid_extensions:
+                return url_ext
+            
+            # Default to PDF if no valid extension found
+            return '.pdf'
+            
+        except Exception as e:
+            self._log_message(f"Error in get_file_info: {str(e)}")
+            return '.pdf'

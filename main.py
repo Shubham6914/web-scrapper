@@ -150,7 +150,7 @@ class ScribdScraper:
                     if search_success and found_urls:
                         self.config_manager.log_message(f"Found {len(found_urls)} URLs to process")
                         current_downloads = 0
-                        required_downloads = 800
+                        required_downloads = 140
                         
                         for url in found_urls:
                             if self.url_manager.is_processed(url):
@@ -168,6 +168,7 @@ class ScribdScraper:
                                 
                                 # Check if we've reached 2 downloads
                                 if current_downloads >= required_downloads:
+                                    self.config_manager.log_message(f"succefully completed {current_downloads} downloads for this {subcategory}")
                                     self.progress_tracker.mark_subcategory_complete(category, subcategory)
                                     break
                             

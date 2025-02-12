@@ -26,7 +26,7 @@ class SearchExecutionManager:
             'min_results': 2,
             'max_results': 5,
             'search_delay': 3,
-            'max_page_limit': 25  # New: Maximum pages to process
+            'max_page_limit': 5 # New: Maximum pages to process
         }
 
     def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
@@ -55,12 +55,12 @@ class SearchExecutionManager:
                     
                     # Check for no results
                     try:
-                        no_results = self.driver.find_element(By.XPATH, "//div[contains(text(), 'No results for')]")
+                        no_results = self.driver.find_elements(By.XPATH, "//div[contains(text(), 'No results for')]")
                         if no_results:
                             self.config_manager.log_message(f"No results found on page {page}, ending search.")
                             break
-                    except:
-                        pass
+                    except Exception as e:
+                        self.config_manager.log_message(f"Error checking no results: {str(e)}")
                     
                     # Collect URLs from current page
                     page_urls = self.collect_document_urls(category, subcategory)
@@ -151,28 +151,40 @@ class SearchExecutionManager:
     def collect_document_urls(self, category, subcategory):
         """Collect and filter document URLs"""
         try:
-            elements = self.driver.find_elements(
-                By.CSS_SELECTOR, 'a[class^="FluidCell-module_linkOverlay"]'
+            self.config_manager.log_message("Starting URL collection...")
+            
+            # Wait for page to be fully loaded
+            WebDriverWait(self.driver, 15).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
             )
+            
+            # Small delay to ensure dynamic content loads
+            time.sleep(2)
+            
+            # Original selector
+            main_selector = 'a[class^="FluidCell-module_linkOverlay"]'
+            
+            # Get elements using original selector
+            elements = self.driver.find_elements(By.CSS_SELECTOR, main_selector)
+            self.config_manager.log_message(f"Found {len(elements)} elements with selector: {main_selector}")
             
             new_urls = []
             for element in elements:
                 try:
                     url = element.get_attribute('href')
-                    if (url and 
-                        'www.scribd.com/document/' in url and 
-                        not self.url_manager.is_processed(url)):
+                    if url and 'scribd.com/document/' in url:
                         new_urls.append(url)
-
-                            
                 except Exception as e:
-                    print(f"Error getting URL: {str(e)}")
+                    self.config_manager.log_message(f"Error extracting URL: {str(e)}")
                     continue
                     
+            self.config_manager.log_message(f"Total URLs collected: {len(new_urls)}")
             return new_urls
-            
+                
         except Exception as e:
-            print(f"Error collecting URLs: {str(e)}")
+            self.config_manager.log_message(f"Error in collect_document_urls: {str(e)}")
+            import traceback
+            self.config_manager.log_message(f"Full traceback: {traceback.format_exc()}")
             return []
 
     def validate_results(self, category, subcategory):

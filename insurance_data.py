@@ -1,6 +1,5 @@
 INSURANCE_CATEGORIES = {
     "HEALTH_INSURANCE": [
-        "Medical_Insurance",
         "Dental_Insurance",
         "Vision_Insurance",
         "Disability_Insurance",

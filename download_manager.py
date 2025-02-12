@@ -367,8 +367,14 @@ class DownloadManager:
             # Get actual extension from found file
             actual_extension = os.path.splitext(found_file)[1].lower()
             
+            # Generate new filename
+            partial_new_filename = self.name_handler.generate_unique_name(
+                cleaned_title,
+                found_file,
+                download_url
+            )
             # Create new filename with correct extension
-            new_filename = os.path.splitext(cleaned_title)[0] + actual_extension
+            new_filename = partial_new_filename + actual_extension
             
             # Setup paths
             old_path = os.path.join(source_dir, found_file)
