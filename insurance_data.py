@@ -1,63 +1,158 @@
-INSURANCE_CATEGORIES = {
-    "HEALTH_INSURANCE": [
-        "Dental_Insurance",
-        "Vision_Insurance",
-        "Disability_Insurance",
-        "Long_term_Care_Insurance"
+COMMERCIAL_INSURANCE_CATEGORIES = {
+    "BUSINESS INSURANCE": [
+        "General Liability Insurance",
+        "Professional Liability Insurance",
+        "Property Insurance",
+        "Commercial Umbrella Insurance",
+        "Business Owners Policy",
+        "Cyber Liability Insurance",
+        "Workers Compensation Insurance",
+        "Commercial Auto Insurance",
+        "Product Liability Insurance",
+        "Business Interruption Insurance",
+        "Equipment Breakdown Insurance",
+        "Inland Marine Insurance",
+        "Builders Risk Insurance",
+        "Environmental Liability Insurance",
+        "Liquor Liability Insurance",
+        "Event Cancellation Insurance",
+        "Marine Insurance",
+        "Aviation Insurance",
+        "Group Health Insurance",
+        "Employee Benefits Liability Insurance",
+        "Contract Bonds",
+        "Commercial Bonds",
+        "Court Bonds",
+        "Data Breach Insurance",
+        "Network Security Insurance",
+        "Combined Property and Liability Insurance",
+        "Excess Liability Insurance"
+    ],
+    
+    "COMMERCIAL PROPERTY INSURANCE": [
+        "Building Coverage",
+        "Business Personal Property Coverage",
+        "Business Income Coverage",
+        "Extra Expense Coverage",
+        "Equipment Breakdown Coverage",
+        "Debris Removal Coverage",
+        "Ordinance or Law Coverage",
+        "Tenant Improvements Coverage",
+        "Outdoor Property Coverage",
+        "Signs Coverage",
+        "Glass Coverage",
+        "Valuable Papers Coverage"
+    ],
+    
+    "COMMERCIAL LIABILITY INSURANCE": [
+        "General Liability",
+        "Professional Liability",
+        "Product Liability",
+        "Employment Practices Liability",
+        "Directors and Officers Liability",
+        "Errors and Omissions Liability",
+        "Cyber Liability",
+        "Environmental Liability",
+        "Umbrella Liability",
+        "Excess Liability",
+        "Media Liability",
+        "Technology Liability"
+    ],
+    
+    "COMMERCIAL AUTO INSURANCE": [
+        "Liability Coverage",
+        "Physical Damage Coverage",
+        "Hired and Non-owned Auto Coverage",
+        "Motor Carrier Coverage",
+        "Garage Keepers Coverage",
+        "Trailer Interchange Coverage",
+        "Rental Reimbursement Coverage",
+        "Towing Coverage"
+    ],
+    
+    "WORKERS COMPENSATION INSURANCE": [
+        "Medical Benefits Coverage",
+        "Lost Wages Coverage",
+        "Rehabilitation Coverage",
+        "Death Benefits Coverage",
+        "Disability Benefits Coverage",
+        "Occupational Disease Coverage",
+        "Employer's Liability Coverage"
+    ],
+    
+    "COMMERCIAL SPECIALTY INSURANCE": [
+        "Contractors Insurance",
+        "Restaurant Insurance",
+        "Hotel Insurance",
+        "Manufacturing Insurance",
+        "Retail Insurance",
+        "Wholesale Insurance",
+        "Healthcare Facility Insurance",
+        "Educational Institution Insurance",
+        "Technology Company Insurance",
+        "Professional Services Insurance",
+        "Nonprofit Organization Insurance",
+        "Religious Institution Insurance"
     ],
 
-    "AUTO_INSURANCE": [
-        "Liability_Coverage",
-        "Collision_Coverage",
-        "Comprehensive_Coverage",
-        "Personal_Injury_Protection",
-        "Uninsured_Motorist_Coverage"
+    "COMMERCIAL BONDS": [
+        "Bid Bonds",
+        "Performance Bonds",
+        "Payment Bonds",
+        "License and Permit Bonds",
+        "Court Bonds",
+        "Fiduciary Bonds",
+        "Public Official Bonds",
+        "Customs Bonds"
     ],
 
-    "HOMEOWNERS_INSURANCE": [
-        "Dwelling_Coverage",
-        "Personal_Property_Coverage",
-        "Liability_Protection",
-        "Flood_Insurance",
-        "Earthquake_Insurance"
+    "MARINE INSURANCE": [
+        "Ocean Marine Insurance",
+        "Inland Marine Insurance",
+        "Cargo Insurance",
+        "Hull Insurance",
+        "Protection and Indemnity Insurance",
+        "Marine Liability Insurance"
     ],
 
-    "LIFE_INSURANCE": [
-        "Term_Life_Insurance",
-        "Whole_Life_Insurance",
-        "Universal_Life_Insurance",
-        "Variable_Life_Insurance",
-        "Accidental_Death_Dismemberment"
+    "AVIATION INSURANCE": [
+        "Aircraft Hull Insurance",
+        "Aviation Liability Insurance",
+        "Passenger Liability Insurance",
+        "Airport Liability Insurance",
+        "Aircraft Products Liability",
+        "Aviation Ground Risk Insurance"
     ],
 
-    "TRAVEL_INSURANCE": [
-        "Trip_Cancellation_Insurance",
-        "Medical_Travel_Insurance",
-        "Baggage_Insurance"
+    "CYBER INSURANCE": [
+        "Data Breach Coverage",
+        "Cyber Liability Coverage",
+        "Business Interruption Coverage",
+        "Cyber Extortion Coverage",
+        "Digital Asset Protection",
+        "Cyber Crime Coverage",
+        "Network Security Coverage"
     ],
 
-    "PET_INSURANCE": [
-        "Accident_Only_Plan",
-        "Comprehensive_Plan",
-        "Wellness_Plan"
+    "COMMERCIAL PACKAGE POLICY": [
+        "Property Coverage",
+        "General Liability Coverage",
+        "Crime Insurance",
+        "Inland Marine Coverage",
+        "Equipment Breakdown Coverage",
+        "Business Income Coverage"
     ],
 
-    "BUSINESS_INSURANCE": [
-        "General_Liability_Insurance",
-        "Professional_Liability_Insurance",
-        "Property_Insurance",
-        "Commercial_Umbrella_Insurance",
-        "Business_Owners_Policy",
-        "Cyber_Liability_Insurance",
-        "Workers_Compensation_Insurance",
-        "Commercial_Auto_Insurance",
-        "Product_Liability_Insurance"
-    ],
-
-    "SPECIALTY_INSURANCE": [
-        "Event_Insurance",
-        "Boat_Insurance",
-        "Motorcycle_Insurance",
-        "Renters_Insurance"
+    "INDUSTRY-SPECIFIC INSURANCE": [
+        "Agriculture Insurance",
+        "Construction Insurance",
+        "Energy Insurance",
+        "Entertainment Insurance",
+        "Financial Institution Insurance",
+        "Food Service Insurance",
+        "Healthcare Insurance",
+        "Real Estate Insurance",
+        "Technology Insurance",
+        "Transportation Insurance"
     ]
 }

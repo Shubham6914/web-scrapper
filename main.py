@@ -15,7 +15,7 @@ from SearchExecutionManager import SearchExecutionManager
 from ProgressTracker import ProgressTracker
 
 # Import utilities
-from insurance_data import INSURANCE_CATEGORIES
+from insurance_data import COMMERCIAL_INSURANCE_CATEGORIES
 from file_naming_convention import DocumentNameHandler
 from category_processor import CategoryProcessor
 from ProcessedURLManager import ProcessedURLManager
@@ -33,7 +33,7 @@ class ScribdScraper:
             self.progress_tracker = ProgressTracker(self.config_manager.log_dir)
             
             # Initialize category tracking
-            self.progress_tracker.initialize_category_tracking(INSURANCE_CATEGORIES)
+            self.progress_tracker.initialize_category_tracking(COMMERCIAL_INSURANCE_CATEGORIES)
             
             # Get resume point
             resume_point = self.progress_tracker.get_resume_point()
@@ -56,7 +56,7 @@ class ScribdScraper:
             
             
             # Initialize search components
-            self.search_mechanism = SearchMechanism(INSURANCE_CATEGORIES)
+            self.search_mechanism = SearchMechanism(COMMERCIAL_INSURANCE_CATEGORIES)
             current_search = self.search_mechanism.initialize_search(resume_point)
             self.search_executor = SearchExecutionManager(
                 driver=self.driver,
