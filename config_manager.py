@@ -28,7 +28,7 @@ class ConfigManager:
         # Base Directory Setup
         self.app_dir = os.path.dirname(os.path.abspath(__file__))
         self.user_data_dir = os.path.join(self.app_dir, 'chrome-user-data')
-        self.insurance_files_dir = os.path.join(self.app_dir, 'INSURANCE_FILES')
+        self.insurance_files_dir = os.path.join(self.app_dir, 'COMMERCIAL INSURANCE_FILES')
         self.log_dir = os.path.join(self.app_dir, 'logs')
         self.config_file = os.path.join(self.app_dir, 'config.json')
         

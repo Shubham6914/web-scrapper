@@ -44,8 +44,8 @@ class ScribdScraper:
                 log_file=self.config_manager.log_file
             )
             self.report_manager = DownloadReportManager(
-            excel_file='download_reports.xlsx',
-            spreadsheet_id='1sbKp5Xa_NPd5Bp6MbaS_eaLlgLzsdX_t3jcms3zgXQ4'
+            excel_file='commercial_insurance.xlsx',
+            spreadsheet_id='1WuJFYVSmBbfRGjrIT2Yki96BAuiZLqaKH3BpnMtrST8'
             )
                     
             # Setup WebDriver
