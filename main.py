@@ -52,7 +52,7 @@ class ScribdScraper:
             self.driver = self.setup_driver()
             
             # Initialize core managers
-            self.auth_manager = AuthManager(self.driver, self.config_manager)
+            self.auth_manager = AuthManager(self.driver, self.config_manager, debug=True)
             
             
             # Initialize search components
@@ -150,11 +150,14 @@ class ScribdScraper:
                     if search_success and found_urls:
                         self.config_manager.log_message(f"Found {len(found_urls)} URLs to process")
                         current_downloads = 0
-                        required_downloads = 140
+                        required_downloads = 100
+                        
+                        # Flag to track if we need to move to next subcategory
+                        subcategory_complete = False
                         
                         for url in found_urls:
-                            if self.url_manager.is_processed(url):
-                                continue
+                            # if self.url_manager.is_processed(url):
+                            #     continue
                                 
                             success = self.download_manager.download_document(
                                 url,
@@ -169,15 +172,33 @@ class ScribdScraper:
                                 # Check if we've reached 2 downloads
                                 if current_downloads >= required_downloads:
                                     self.config_manager.log_message(f"succefully completed {current_downloads} downloads for this {subcategory}")
+                                     # Mark subcategory as complete
                                     self.progress_tracker.mark_subcategory_complete(category, subcategory)
-                                    break
+                                    
+                                    # Save progress immediately
+                                    self.progress_tracker.save_progress()
+                                    
+                                    # Set flag to break outer loop
+                                    subcategory_complete = True
+                                    
+                                    # Move to next subcategory
+                                    current_search = self.search_mechanism.move_to_next()
+                                    
+                                    # Log transition
+                                    self.config_manager.log_message(
+                                        f"Moving to next subcategory after completing {subcategory}"
+                                    )
+                                    break  # Break the URL loop
                             
                             time.sleep(4)
-                    
-                    # Move to next search item
-                    current_search = self.search_mechanism.move_to_next()
-                    time.sleep(5)
-                    
+                        # Only move to next search if subcategory isn't complete
+                        if not subcategory_complete:
+                            current_search = self.search_mechanism.move_to_next()
+                            time.sleep(5)
+                    else:
+                        # If no URLs found, move to next search
+                        current_search = self.search_mechanism.move_to_next()
+                        time.sleep(5)
                     # Check category completion
                     if current_search and current_search.get('is_last_subcategory'):
                         if self.progress_tracker.is_category_complete(category):

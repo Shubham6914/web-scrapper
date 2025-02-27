@@ -25,71 +25,85 @@ class SearchExecutionManager:
             'wait_time': 10,
             'min_results': 2,
             'max_results': 5,
-            'search_delay': 3,
-            'max_page_limit': 5 # New: Maximum pages to process
+            'search_delay': 5,
+            'max_page_limit': 10 # New: Maximum pages to process
         }
 
     def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
         """
-        Execute search with retries using direct URL pagination
+        Execute search with retries for each page using direct URL pagination
+        Returns success status and collected URLs
         """
         self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
         
-        for attempt in range(max_attempts):
-            try:
-                self.config_manager.log_message(f"Attempt {attempt + 1} of {max_attempts}")
-                
-                all_urls = []
-                
-                # Process pages using direct URL pagination
-                for page in range(1, self.search_config['max_page_limit'] + 1):
-                    self.config_manager.log_message(f"\nProcessing page {page}")
+        all_urls = []  # Master list for all collected URLs
+        max_page_limit = 10  # Maximum pages to process
+        
+        # Process each page up to limit
+        for page in range(1, max_page_limit + 1):
+            self.config_manager.log_message(f"\n=== Processing page {page} ===")
+            page_urls = []  # URLs collected from current page
+            
+            # Try each page multiple times
+            for attempt in range(max_attempts):
+                try:
+                    self.config_manager.log_message(f"Attempt {attempt + 1} of {max_attempts} for page {page}")
                     
-                    # Construct search URL with page number
+                    # Construct and navigate to search URL
                     search_url = f'https://www.scribd.com/search?query={search_term}&page={page}'
                     self.config_manager.log_message(f"Navigating to: {search_url}")
                     
-                    # Navigate to search URL
                     self.driver.get(search_url)
                     time.sleep(self.search_config['search_delay'])
                     
-                    # Check for no results
+                    # Check for explicit no results message
                     try:
                         no_results = self.driver.find_elements(By.XPATH, "//div[contains(text(), 'No results for')]")
                         if no_results:
-                            self.config_manager.log_message(f"No results found on page {page}, ending search.")
-                            break
+                            self.config_manager.log_message(f"Explicit 'No results' found on page {page}")
+                            return True if all_urls else False, all_urls
                     except Exception as e:
                         self.config_manager.log_message(f"Error checking no results: {str(e)}")
                     
-                    # Collect URLs from current page
-                    page_urls = self.collect_document_urls(category, subcategory)
+                    # Collect URLs from current page attempt
+                    current_attempt_urls = self.collect_document_urls(category, subcategory)
                     
-                    if page_urls:
-                        all_urls.extend(page_urls)
-                        self.config_manager.log_message(f"Found {len(page_urls)} URLs on page {page}")
+                    if current_attempt_urls:
+                        page_urls = current_attempt_urls  # Store successful URLs
+                        self.config_manager.log_message(f"Found {len(current_attempt_urls)} URLs on page {page}, attempt {attempt + 1}")
+                        break  # Successfully got URLs, move to next page
                     else:
-                        self.config_manager.log_message(f"No URLs found on page {page}, ending search.")
-                        break
-                    
-                    # Add delay between pages
-                    if page < self.search_config['max_page_limit']:
-                        time.sleep(self.search_config['search_delay'])
-                
-                if all_urls:
-                    self.config_manager.log_message(f"Total URLs found: {len(all_urls)}")
-                    return True, all_urls
-                
-                if attempt < max_attempts - 1:
-                    self.config_manager.log_message("No URLs found, waiting before retry...")
-                    time.sleep(5)
-                
-            except Exception as e:
-                self.config_manager.log_message(f"Error in search attempt {attempt + 1}: {str(e)}")
-                if attempt < max_attempts - 1:
-                    time.sleep(5)
+                        self.config_manager.log_message(f"No URLs found on page {page}, attempt {attempt + 1}")
+                        
+                    if attempt < max_attempts - 1:
+                        self.config_manager.log_message("Waiting before next attempt...")
+                        time.sleep(5)
+                        
+                except Exception as e:
+                    self.config_manager.log_message(f"Error in page {page}, attempt {attempt + 1}: {str(e)}")
+                    if attempt < max_attempts - 1:
+                        time.sleep(5)
+            
+            # Add any URLs found from this page to master list
+            if page_urls:
+                all_urls.extend(page_urls)
+                self.config_manager.log_message(f"Added {len(page_urls)} URLs from page {page} to collection")
+            
+            # Log running total
+            self.config_manager.log_message(f"Running total of URLs collected: {len(all_urls)}")
+            
+            # Add delay before next page unless it's the last page
+            if page < max_page_limit:
+                self.config_manager.log_message(f"Waiting before processing page {page + 1}")
+                time.sleep(self.search_config['search_delay'])
         
-        return False, []
+        # Final results
+        self.config_manager.log_message(f"\n=== Search completed ===")
+        self.config_manager.log_message(f"Total pages processed: {max_page_limit}")
+        self.config_manager.log_message(f"Total URLs collected: {len(all_urls)}")
+        
+        # Return True if any URLs were found, False otherwise
+        return len(all_urls) > 0, all_urls
 
     def execute_single_search(self, category, subcategory, search_term):
         """
@@ -149,43 +163,120 @@ class SearchExecutionManager:
             return False, []
             
     def collect_document_urls(self, category, subcategory):
-        """Collect and filter document URLs"""
+        """
+        Collect and filter document URLs using multiple selector strategies
+        Args:
+            category: Current category
+            subcategory: Current subcategory
+        Returns:
+            list: Collected valid URLs
+        """
         try:
-            self.config_manager.log_message("Starting URL collection...")
+            self.config_manager.log_message("Starting URL collection with enhanced selectors...")
             
-            # Wait for page to be fully loaded
-            WebDriverWait(self.driver, 15).until(
-                lambda driver: driver.execute_script("return document.readyState") == "complete"
-            )
-            
-            # Small delay to ensure dynamic content loads
-            time.sleep(2)
-            
-            # Original selector
-            main_selector = 'a[class^="FluidCell-module_linkOverlay"]'
-            
-            # Get elements using original selector
-            elements = self.driver.find_elements(By.CSS_SELECTOR, main_selector)
-            self.config_manager.log_message(f"Found {len(elements)} elements with selector: {main_selector}")
-            
-            new_urls = []
-            for element in elements:
+            # List of selector strategies to try (in order of preference)
+            selector_strategies = [
+                {
+                    'type': 'css',
+                    'selector': 'a[class^="FluidCell-module_linkOverlay"]',
+                    'description': 'Original fluid cell selector'
+                },
+                {
+                    'type': 'css',
+                    'selector': 'div.doc-cell a',
+                    'description': 'Document cell links'
+                },
+                {
+                    'type': 'xpath',
+                    'selector': '//div[contains(@class, "search-results")]//a[contains(@href, "/document/")]',
+                    'description': 'Direct document links'
+                },
+                {
+                    'type': 'css',
+                    'selector': 'a[href*="/document/"]',
+                    'description': 'Generic document links'
+                }
+            ]
+
+            # Wait for page load with better timing
+            try:
+                WebDriverWait(self.driver, 15).until(
+                    lambda driver: driver.execute_script("return document.readyState") == "complete"
+                )
+                # Wait for search results container
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div[class*="search-results"]'))
+                )
+            except Exception as e:
+                self.config_manager.log_message(f"Warning: Page load wait condition failed: {str(e)}")
+
+            # Try each selector strategy
+            new_urls = set()  # Using set to avoid duplicates
+            for strategy in selector_strategies:
                 try:
-                    url = element.get_attribute('href')
-                    if url and 'scribd.com/document/' in url:
-                        new_urls.append(url)
-                except Exception as e:
-                    self.config_manager.log_message(f"Error extracting URL: {str(e)}")
-                    continue
+                    self.config_manager.log_message(f"\nTrying {strategy['description']}...")
                     
-            self.config_manager.log_message(f"Total URLs collected: {len(new_urls)}")
-            return new_urls
+                    # Select elements based on selector type
+                    if strategy['type'] == 'css':
+                        elements = self.driver.find_elements(By.CSS_SELECTOR, strategy['selector'])
+                    else:  # xpath
+                        elements = self.driver.find_elements(By.XPATH, strategy['selector'])
+                    
+                    self.config_manager.log_message(f"Found {len(elements)} elements with {strategy['type']} selector: {strategy['selector']}")
+                    
+                    # Process elements found with current strategy
+                    for element in elements:
+                        try:
+                            url = element.get_attribute('href')
+                            if self._is_valid_document_url(url):
+                                new_urls.add(url)
+                        except Exception as e:
+                            self.config_manager.log_message(f"Error extracting URL from element: {str(e)}")
+                            continue
+                    
+                    # If we found URLs with this strategy, we can stop trying others
+                    if new_urls:
+                        self.config_manager.log_message(f"Successfully found {len(new_urls)} URLs using {strategy['description']}")
+                        break
+                        
+                except Exception as e:
+                    self.config_manager.log_message(f"Error with {strategy['description']}: {str(e)}")
+                    continue
+            
+            # Convert set back to list and return
+            final_urls = list(new_urls)
+            self.config_manager.log_message(f"Final total unique URLs collected: {len(final_urls)}")
+            return final_urls
                 
         except Exception as e:
             self.config_manager.log_message(f"Error in collect_document_urls: {str(e)}")
             import traceback
             self.config_manager.log_message(f"Full traceback: {traceback.format_exc()}")
             return []
+
+    def _is_valid_document_url(self, url):
+        """
+        Validate if URL is a valid Scribd document URL
+        Args:
+            url: URL to validate
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if not url:
+            return False
+            
+        # Basic validation criteria
+        valid_conditions = [
+            'scribd.com/document/' in url,
+            not url.endswith('#'),
+            not url.endswith('/')
+        ]
+        
+        # Check if URL was already processed
+        if self.url_manager.is_processed(url):
+            return False
+            
+        return all(valid_conditions)
 
     def validate_results(self, category, subcategory):
         """
