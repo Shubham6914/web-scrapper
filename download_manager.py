@@ -240,54 +240,104 @@ class DownloadManager:
             current_dir = self.config_manager.get_current_download_dir()
             self.config_manager.log_message(f"Setting download directory to: {current_dir}")
             
-            # Wait for modal download button
-            modal_download_button = self.wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[data-e2e="modal-download-button"]'))
-            )
+            # List of possible selectors for the download button
+            download_button_selectors = [
+                'a[data-e2e="modal-download-button"]',
+                'button[data-e2e="modal-download-button"]',
+                '.download-button',
+                '[data-e2e*="download"]',
+                'a[href*="download"]',
+                'button[class*="download"]'
+            ]
+
+            # Try each selector
+            modal_download_button = None
+            for selector in download_button_selectors:
+                try:
+                    # Wait with shorter timeout for each attempt
+                    modal_download_button = WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
+                    if modal_download_button:
+                        self.config_manager.log_message(f"Found download button with selector: {selector}")
+                        break
+                except:
+                    continue
+
+            # If still no button found, try JavaScript approach
+            if not modal_download_button:
+                try:
+                    modal_download_button = self.driver.execute_script("""
+                        return document.querySelector('a[href*="download"], button[data-e2e*="download"]');
+                    """)
+                except:
+                    pass
 
             if not modal_download_button:
+                self.config_manager.log_message("Could not find download button in modal")
                 return None, None
+
+            # Ensure button is visible and clickable
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", modal_download_button)
+            time.sleep(2)  # Allow time for any animations
 
             # Get download URL and original filename
             download_url = modal_download_button.get_attribute('href')
-            original_filename = os.path.basename(download_url.split('?')[0])
-            self.config_manager.log_message(f" 1st Original filename: {original_filename}")
             
+            # If href is not available, try data attributes
+            if not download_url:
+                download_url = modal_download_button.get_attribute('data-download-url')
+            
+            if not download_url:
+                self.config_manager.log_message("Could not find download URL")
+                return None, None
+
+            original_filename = os.path.basename(download_url.split('?')[0])
+            self.config_manager.log_message(f"Original filename: {original_filename}")
+
             # Clean up URL and filename
             if download_url.endswith('#'):
                 download_url = download_url[:-1]
             if original_filename.endswith('#'):
                 original_filename = original_filename[:-1]
-                
-            # # Preserve original filename structure but ensure .pdf extension
-            # if not original_filename.lower().endswith('.pdf'):
-            #     original_filename += '.pdf'
-            
-            self.config_manager.log_message(f"Download URL: {download_url}")
-            self.config_manager.log_message(f"Original filename: {original_filename}")
-            
-            # Use original filename structure
-            cleaned_title = original_filename
-            
-            # Set download attributes
-            self.driver.execute_script("""
-                var link = arguments[0];
-                var fileName = arguments[1];
-                link.setAttribute('download', fileName);
-                link.setAttribute('target', '_blank');
-            """, modal_download_button, cleaned_title)
 
-            # Click download button
-            modal_download_button.click()
-            self.config_manager.log_message("Download initiated")
-            
-            return cleaned_title, download_url
-                
+            cleaned_title = original_filename
+
+            # Set download attributes
+            try:
+                self.driver.execute_script("""
+                    var link = arguments[0];
+                    var fileName = arguments[1];
+                    link.setAttribute('download', fileName);
+                    link.setAttribute('target', '_blank');
+                """, modal_download_button, cleaned_title)
+            except:
+                self.config_manager.log_message("Could not set download attributes")
+
+            # Try different click methods
+            click_successful = False
+            try:
+                modal_download_button.click()
+                click_successful = True
+            except:
+                try:
+                    self.driver.execute_script("arguments[0].click();", modal_download_button)
+                    click_successful = True
+                except:
+                    self.config_manager.log_message("Failed to click download button")
+                    return None, None
+
+            if click_successful:
+                self.config_manager.log_message("Download initiated")
+                time.sleep(2)  # Wait for download to start
+                return cleaned_title, download_url
+
+            return None, None
+
         except Exception as e:
             self.config_manager.log_message(f"Error in download modal: {str(e)}")
             self.config_manager.log_message(traceback.format_exc())
-            return None, None
-        
+            return None, None    
     
     def verify_and_rename_file(self, cleaned_title, download_url, category, subcategory):
         """Verify download and rename file"""

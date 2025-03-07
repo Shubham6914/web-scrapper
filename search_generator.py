@@ -40,10 +40,18 @@ class SearchMechanism:
         current_category = self.category_list[self.current_category_index]
         current_subcategory = self.categories[current_category][self.current_subcategory_index]
         
+        # Format search term explicitly
+        search_term = self._format_search_term(current_subcategory)
+        
+        # Debug logging
+        print(f"DEBUG: Category: {current_category}")
+        print(f"DEBUG: Subcategory: {current_subcategory}")
+        print(f"DEBUG: Formatted search term: {search_term}")
+        
         return {
             'category': current_category,
             'subcategory': current_subcategory,
-            'search_term': self._format_search_term(current_subcategory),
+            'search_term': search_term,  # This should now be properly formatted
             'is_last_subcategory': self.is_last_subcategory(),
             'is_last_category': self.is_last_category(),
             'category_index': self.current_category_index,
@@ -59,21 +67,24 @@ class SearchMechanism:
         Returns:
             str: Formatted search term
         """
+        if not term:
+            return ""
+        
         # Remove underscores and clean up
         term = term.replace('_', ' ')
         term = ' '.join(term.split())
         
-        # Add 'insurance' if not present
+        # For Commercial Auto Insurance, we want to keep it as is
         if 'insurance' not in term.lower():
             term += ' insurance'
-            
-        # Remove category prefix if present
-        for category in self.category_list:
-            category_name = category.replace('_', ' ').lower()
-            if term.lower().startswith(category_name):
-                term = term[len(category_name):].strip()
         
-        return term.strip()
+        # Clean up any double spaces
+        formatted_term = ' '.join(term.split())
+        
+        print(f"DEBUG: Original term: {term}")
+        print(f"DEBUG: Formatted search term: {formatted_term}")
+    
+        return formatted_term
     
     def move_to_next(self):
         """

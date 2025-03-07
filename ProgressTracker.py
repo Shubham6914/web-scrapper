@@ -228,7 +228,7 @@ class ProgressTracker:
         """Check if subcategory has required downloads"""
         try:
             downloads = self.progress_data['completed']['downloads'].get(category, {}).get(subcategory, 0)
-            required_downloads = 150  # Set explicit requirement
+            required_downloads = 100  # Set explicit requirement
             return downloads >= required_downloads
         except Exception as e:
             self.log_message(f"Error checking subcategory completion: {str(e)}")

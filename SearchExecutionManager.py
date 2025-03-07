@@ -37,7 +37,7 @@ class SearchExecutionManager:
         self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
         
         all_urls = []  # Master list for all collected URLs
-        max_page_limit = 10  # Maximum pages to process
+        max_page_limit = 5 # Maximum pages to process
         
         # Process each page up to limit
         for page in range(1, max_page_limit + 1):
@@ -51,6 +51,8 @@ class SearchExecutionManager:
                     
                     # Construct and navigate to search URL
                     search_url = f'https://www.scribd.com/search?query={search_term}&page={page}'
+                    self.config_manager.log_message(f"Search term: {search_term}")  # Log search term for each attempt
+        
                     self.config_manager.log_message(f"Navigating to: {search_url}")
                     
                     self.driver.get(search_url)

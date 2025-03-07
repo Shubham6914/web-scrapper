@@ -10,6 +10,7 @@ import time
 from config_manager import ConfigManager
 from auth_manager import AuthManager
 from download_manager import DownloadManager
+from pivot_table_manager import PivotTableManager
 from search_generator import SearchMechanism
 from SearchExecutionManager import SearchExecutionManager
 from ProgressTracker import ProgressTracker
@@ -47,6 +48,17 @@ class ScribdScraper:
             excel_file='commercial_insurance.xlsx',
             spreadsheet_id='1WuJFYVSmBbfRGjrIT2Yki96BAuiZLqaKH3BpnMtrST8'
             )
+            # Initialize pivot manager and generate initial report
+            self.pivot_manager = PivotTableManager(
+            progress_tracker=self.progress_tracker,
+            spreadsheet_id='1xs7PMfsoJidcOaJuibbT3qq18aPsxzJj20tVz0kACN4'  # Same as your report_manager
+            )
+            # Generate initial pivot table with existing data
+            try:
+                self.pivot_manager.generate_reports()
+                self.config_manager.log_message("Initial pivot table generated successfully")
+            except Exception as e:
+                self.config_manager.log_message(f"Error generating initial pivot table: {str(e)}")
                     
             # Setup WebDriver
             self.driver = self.setup_driver()
@@ -118,6 +130,8 @@ class ScribdScraper:
                     category = current_search['category']
                     subcategory = current_search['subcategory']
                     search_term = current_search['search_term']
+                    self.config_manager.log_message(f"Search term: {search_term}")
+                    print(f"Search term=======>: {search_term}")
                     
                     # Update progress tracker position
                     self.progress_tracker.update_position(
@@ -174,12 +188,17 @@ class ScribdScraper:
                                     self.config_manager.log_message(f"succefully completed {current_downloads} downloads for this {subcategory}")
                                      # Mark subcategory as complete
                                     self.progress_tracker.mark_subcategory_complete(category, subcategory)
-                                    
+                                    try:
+                                        self.pivot_manager.generate_reports()
+                                        self.config_manager.log_message(f"Updated pivot table for completed subcategory: {subcategory}")
+                                    except Exception as e:
+                                        self.config_manager.log_message(f"Error updating pivot table: {str(e)}")
                                     # Save progress immediately
                                     self.progress_tracker.save_progress()
                                     
                                     # Set flag to break outer loop
                                     subcategory_complete = True
+                    
                                     
                                     # Move to next subcategory
                                     current_search = self.search_mechanism.move_to_next()
@@ -209,15 +228,20 @@ class ScribdScraper:
                     
                 except Exception as e:
                     self.config_manager.log_message(f"Error processing search: {str(e)}")
+                     # Update pivot table on error
+                    self.pivot_manager.generate_reports()
                     current_search = self.search_mechanism.move_to_next()
                     continue
 
             # Print final statistics
             self.print_final_stats()
+            self.pivot_manager.generate_reports()
 
         except Exception as e:
             self.config_manager.log_message(f"Critical error in main execution: {str(e)}")
             self.config_manager.log_message(traceback.format_exc())
+             # Try to update pivot table even on error
+            self.pivot_manager.generate_reports()
         finally:
             self.cleanup()
 
