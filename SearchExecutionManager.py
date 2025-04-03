@@ -22,22 +22,22 @@ class SearchExecutionManager:
         self.url_manager = url_manager if url_manager else ProcessedURLManager()
         
         self.search_config = {
-            'wait_time': 10,
+            'wait_time': 12,
             'min_results': 2,
             'max_results': 5,
             'search_delay': 5,
-            'max_page_limit': 10 # New: Maximum pages to process
+            'max_page_limit': 20 # New: Maximum pages to process
         }
 
     def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
         """
-        Execute search with retries for each page using direct URL pagination
+        Execute search with retries fordef wait_for_element(self, by, selector, timeout=10, visible=True): each page using direct URL pagination
         Returns success status and collected URLs
         """
         self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
         
         all_urls = []  # Master list for all collected URLs
-        max_page_limit = 5 # Maximum pages to process
+        max_page_limit = 15 # Maximum pages to process
         
         # Process each page up to limit
         for page in range(1, max_page_limit + 1):

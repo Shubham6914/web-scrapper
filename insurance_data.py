@@ -25,7 +25,6 @@ COMMERCIAL_INSURANCE_CATEGORIES = {
         "Court Bonds",
         "Data Breach Insurance",
         "Network Security Insurance",
-        "Combined Property and Liability Insurance",
         "Excess Liability Insurance"
     ],
     
