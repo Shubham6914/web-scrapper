@@ -59,7 +59,6 @@ COMMERCIAL_INSURANCE_CATEGORIES = {
     ],
     
     "COMMERCIAL AUTO INSURANCE": [
-        "Liability Coverage",
         "Physical Damage Coverage",
         "Hired and Non-owned Auto Coverage",
         "Motor Carrier Coverage",

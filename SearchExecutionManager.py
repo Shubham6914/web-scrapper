@@ -22,11 +22,11 @@ class SearchExecutionManager:
         self.url_manager = url_manager if url_manager else ProcessedURLManager()
         
         self.search_config = {
-            'wait_time': 12,
+            'wait_time': 20,
             'min_results': 2,
             'max_results': 5,
             'search_delay': 5,
-            'max_page_limit': 20 # New: Maximum pages to process
+            'max_page_limit': 25 # New: Maximum pages to process
         }
 
     def execute_search_with_retries(self, category, subcategory, search_term, max_attempts=3):
@@ -37,7 +37,7 @@ class SearchExecutionManager:
         self.config_manager.log_message(f"\n=== Starting search for {category}/{subcategory} ===")
         
         all_urls = []  # Master list for all collected URLs
-        max_page_limit = 15 # Maximum pages to process
+        max_page_limit = 25 # Maximum pages to process
         
         # Process each page up to limit
         for page in range(1, max_page_limit + 1):
@@ -197,6 +197,11 @@ class SearchExecutionManager:
                     'type': 'css',
                     'selector': 'a[href*="/document/"]',
                     'description': 'Generic document links'
+                },
+                {
+                    'type': 'css',
+                    'selector': 'div.doc_cell_container a, div.document_cell a',
+                    'description': 'Document cell container links'
                 }
             ]
 
@@ -225,7 +230,14 @@ class SearchExecutionManager:
                         elements = self.driver.find_elements(By.XPATH, strategy['selector'])
                     
                     self.config_manager.log_message(f"Found {len(elements)} elements with {strategy['type']} selector: {strategy['selector']}")
-                    
+                    # In the collect_document_urls method, after finding elements
+                    self.config_manager.log_message(f"Raw URLs found with {strategy['description']}:")
+                    for element in elements[:5]:  # Log first 5 for brevity
+                        try:
+                            url = element.get_attribute('href')
+                            self.config_manager.log_message(f"  - {url}")
+                        except Exception as e:
+                            self.config_manager.log_message(f"Error extracting URL: {str(e)}")
                     # Process elements found with current strategy
                     for element in elements:
                         try:
@@ -257,28 +269,33 @@ class SearchExecutionManager:
             return []
 
     def _is_valid_document_url(self, url):
-        """
-        Validate if URL is a valid Scribd document URL
-        Args:
-            url: URL to validate
-        Returns:
-            bool: True if valid, False otherwise
-        """
         if not url:
+            self.config_manager.log_message(f"URL rejected: Empty URL")
             return False
             
-        # Basic validation criteria
-        valid_conditions = [
-            'scribd.com/document/' in url,
-            not url.endswith('#'),
-            not url.endswith('/')
-        ]
+        # Log the URL being checked
+        self.config_manager.log_message(f"Checking URL: {url}")
+        
+        # Check each condition separately and log failures
+        if 'scribd.com/document/' not in url:
+            self.config_manager.log_message(f"URL rejected: Not a document URL")
+            return False
+        
+        if url.endswith('#'):
+            self.config_manager.log_message(f"URL rejected: Ends with #")
+            return False
+        
+        if url.endswith('/'):
+            self.config_manager.log_message(f"URL rejected: Ends with /")
+            return False
         
         # Check if URL was already processed
         if self.url_manager.is_processed(url):
+            self.config_manager.log_message(f"URL rejected: Already processed")
             return False
             
-        return all(valid_conditions)
+        self.config_manager.log_message(f"URL accepted: {url}")
+        return True
 
     def validate_results(self, category, subcategory):
         """
